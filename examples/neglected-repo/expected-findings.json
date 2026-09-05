@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "tool": "pubskill-lib",
+  "source_pin": "be72da66a112d0632fd25480c1f51b6e69db4976",
+  "target": {
+    "path": "examples/neglected-repo",
+    "commit": "hmmm",
+    "remote": "hmmm",
+    "dirty": false
+  },
+  "surfaces": [
+    "identity",
+    "docs",
+    "ci",
+    "deps"
+  ],
+  "findings": [
+    {
+      "id": "F001",
+      "surface": "docs",
+      "claim": "README links to CONTRIBUTING.md",
+      "evidence": "README.md:5",
+      "class": "defect",
+      "owner": "repository",
+      "verified": false
+    },
+    {
+      "id": "F002",
+      "surface": "ci",
+      "claim": "workflow test.yml claims tests but only echoes",
+      "evidence": ".github/workflows/test.yml",
+      "class": "defect",
+      "owner": "repository",
+      "verified": false
+    },
+    {
+      "id": "F003",
+      "surface": "deps",
+      "claim": "declared script neglected points to missing module neglected.cli",
+      "evidence": "pyproject.toml [project.scripts]",
+      "class": "defect",
+      "owner": "repository",
+      "verified": false
+    }
+  ],
+  "hmmm": [
+    "target has no .git directory; identity unresolved"
+  ]
+}

@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neglected-repo"
+version = "0.0.0"
+description = "Deliberately neglected fixture repository"
+requires-python = ">=3.11"
+
+[project.scripts]
+neglected = "neglected.cli:main"

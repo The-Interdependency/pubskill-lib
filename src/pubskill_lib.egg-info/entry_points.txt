@@ -1,0 +1,2 @@
+[console_scripts]
+pubskill-audit = pubskill_lib.audit:main
