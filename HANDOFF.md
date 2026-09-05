@@ -2,17 +2,20 @@
 
 This file is the work order. Execute in order. Do not skip to features.
 
+If the host is a VM, read `HANDOFF.vm.md` first. VM default: steps A–F only. No push, no tag, no skill-lib writes.
+
 Owner repo: `The-Interdependency/pubskill-lib`  
 Canon: `The-Interdependency/skill-lib`  
 Current pin: see `SOURCE.md`  
 Public claims: `README.md`  
-Agent contract: `AGENTS.md`
+Agent contract: `AGENTS.md`  
+VM contract: `HANDOFF.vm.md`
 
 ## Goal
 
 A stranger clones this repository, runs the commands in README.md, and gets a findings file for `examples/neglected-repo`.
 
-That is `v0.2.0`. Nothing else is the first tag.
+That is `v0.2.0`. Nothing else is the first tag. A VM receipt is not a tag.
 
 ## Non-goals for this handoff
 
@@ -22,14 +25,15 @@ That is `v0.2.0`. Nothing else is the first tag.
 - Do not rewrite msdmd.
 - Do not add Way / UCNS / energy text to README.
 
-## Prerequisite in skill-lib (do this first if missing)
+## Prerequisite in skill-lib
+
+Only if `WRITE_CANON=1`:
 
 1. Add `status` (`runnable` | `contract` | `org-only`) and optional `runner` to `skills.json`.
 2. Mark only skills that execute in-repo as `runnable`.
 3. Confirm `python -m unittest discover -s tests` passes on a clean skill-lib clone.
-4. If that clone path fails, fix skill-lib before writing code here.
 
-If `repo-audit-repair` is still contract-only, the public CLI may live in *this* repo as a thin inspector that follows that skill's classification rules. Do not invent a sixth findings class.
+VM default: skip this block. Implement the inspect CLI here. Follow repo-audit-repair classes. Do not invent a sixth class.
 
 Allowed classes: `defect`, `environment`, `external`, `policy`, `hmmm`.
 
@@ -37,28 +41,29 @@ Allowed classes: `defect`, `environment`, `external`, `policy`, `hmmm`.
 
 ```
 pubskill-lib/
-  README.md                 # already present; update commands only when they work
-  AGENTS.md                 # already present
-  SOURCE.md                 # already present; update SHA when vendoring
-  HANDOFF.md                # this file
-  LICENSE                   # MPL-2.0
-  pyproject.toml            # package pubskill_lib
+  README.md
+  AGENTS.md
+  SOURCE.md
+  HANDOFF.md
+  HANDOFF.vm.md
+  LICENSE
+  pyproject.toml
   src/pubskill_lib/
     __init__.py
-    audit.py                # CLI: inspect a repo path, write findings.json
-    schema.py               # findings schema
+    audit.py
+    schema.py
   tests/
     test_audit_fixture.py
     test_schema.py
   examples/neglected-repo/
-    README.md               # lies: missing file, dead link
-    pyproject.toml          # or package.json; one stale-looking dep name is enough
-    .github/workflows/ci.yml  # claims tests; runs echo ok
-    tests/test_dummy.py     # real test that would fail if --run is used later
+    README.md
+    pyproject.toml
+    .github/workflows/ci.yml
+    tests/test_dummy.py
     expected-findings.json
-  .agents/skills/README.md  # cites skill-lib SHA
-  .agents/skills/<slice>/   # only runnable slice, propagated, not rewritten
-  .github/workflows/ci.yml  # unittest + audit fixture compare
+  .agents/skills/README.md
+  .agents/skills/<slice>/
+  .github/workflows/ci.yml
 ```
 
 ## Step A — package skeleton
@@ -124,7 +129,7 @@ v0.2 inspect only:
 - flag workflows that claim tests but only `echo`
 - flag missing advertised scripts
 - do not install target deps
-- do not run target tests unless `--run` (defer `--run` if timeboxed; leave it `hmmm` in CLI help)
+- do not run target tests
 
 Exit 0 if the tool ran. Do not exit nonzero just because the target repo is sick. Exit nonzero for tool/schema failures.
 
@@ -136,34 +141,23 @@ Exit 0 if the tool ran. Do not exit nonzero just because the target repo is sick
 2. CI workflow named like tests that does not invoke a test runner
 3. a declared script or extra path that is missing
 
-Commit `examples/neglected-repo/expected-findings.json` produced by the CLI, then locked.
+Write `expected-findings.json` from the CLI output, then lock it.
 
 Acceptance:
 
 ```bash
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/out.json
-python -m tests.compare_findings /tmp/out.json examples/neglected-repo/expected-findings.json
 ```
 
-Compare on `id`, `class`, and `surface`. Allow free text drift in `evidence` only if you explicitly snapshot it.
+Compare on `id`, `class`, and `surface`.
 
 ## Step E — vendor the slice
 
-From a checkout of skill-lib at the SOURCE.md SHA:
+Optional if time or disk is scarce. Prefer A–D first.
 
-```bash
-python tools/propagate_skills.py ../pubskill-lib \
-  --skills msdmd repo-audit-repair \
-  --apply
-```
+From skill-lib at the SOURCE.md SHA, copy only `msdmd` and `repo-audit-repair` into `.agents/skills/` and write `.agents/skills/README.md` with the SHA. Do not copy the rest of skill-lib.
 
-Add other skills only if the CLI imports them. Update SOURCE.md in the same commit.
-
-If propagate needs a skills filter that does not exist, copy the two skill directories by hand and write `.agents/skills/README.md` with the SHA. Do not copy the rest of skill-lib.
-
-## Step F — CI in this repo
-
-On push/PR to `main`:
+## Step F — tests in this repo
 
 ```bash
 python -m pip install -e .
@@ -171,25 +165,15 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/out.json
 ```
 
-Fail the job if schema or fixture compare fails. Do not fail because neglected-repo has findings.
+A `.github/workflows/ci.yml` may be added. The VM does not push it unless `PUSH=1`.
 
 ## Step G — close the public door
 
-Only when A–F pass on a clean clone:
+Not a VM default. Requires `PUSH=1`.
 
-1. Rewrite README status table: inspect ships; `--fix-one` still not shipped.
+1. Rewrite README status table: inspect ships.
 2. Tag `v0.2.0`.
-3. Add `The-Interdependency/pubskill-lib` to skill-lib `ORG_DISTRIBUTION.md` consumer list / drift matrix.
-4. Leave `--fix-one` as a new handoff section, not part of v0.2.0.
-
-## v0.3.0 (later, not this handoff)
-
-`--fix-one` allowed fixes:
-
-- remove or correct a README local path that 404s
-- point placeholder CI at the real test command if that file exists
-
-Re-run inspect. Stamp `verified` on that one finding only.
+3. Add this repo to skill-lib consumer list only with `WRITE_CANON=1`.
 
 ## Done / not done
 
