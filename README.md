@@ -6,19 +6,19 @@ Clone this repo when you want a command that inspects a repository and writes fi
 
 ## Status
 
-The repository exists. The runnable utility is not in the tree yet.
+The inspect CLI ships. Clone, run, get findings.
 
 | Claim | State |
 |---|---|
 | Canon | `The-Interdependency/skill-lib` |
 | This repo | distribution + public CLI + fixtures |
-| Clone / run / findings | **not shipped** — see `HANDOFF.md` |
+| Clone / run / findings | **shipped** — `v0.2` inspect; see `HANDOFF.md` |
 | VM populate | `HANDOFF.vm.md` |
 | Source pin | `SOURCE.md` |
 
 If a command is not in this README, it is not a public promise.
 
-## Intended quickstart (target, not current)
+## Quickstart
 
 ```bash
 git clone https://github.com/The-Interdependency/pubskill-lib
@@ -29,7 +29,7 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
 ```
 
-Those commands are the definition of done for the first utility tag (`v0.2.0`). Until they work, do not treat this README as a product page.
+Those commands are the definition of done for the first utility tag (`v0.2.0`). They run on a clean clone.
 
 ## What this will do
 
