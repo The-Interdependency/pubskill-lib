@@ -13,6 +13,7 @@ The repository exists. The runnable utility is not in the tree yet.
 | Canon | `The-Interdependency/skill-lib` |
 | This repo | distribution + public CLI + fixtures |
 | Clone / run / findings | **not shipped** — see `HANDOFF.md` |
+| VM populate | `HANDOFF.vm.md` |
 | Source pin | `SOURCE.md` |
 
 If a command is not in this README, it is not a public promise.
