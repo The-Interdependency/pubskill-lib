@@ -12,6 +12,7 @@ license = { text = "MPL-2.0" }
 
 [project.scripts]
 pubskill-audit = "pubskill_lib.audit:main"
+pubskill-examine = "pubskill_lib.examine:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

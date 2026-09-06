@@ -49,6 +49,36 @@ Inspect one repository path or URL at a named commit and write:
 - rewrite a repo unless `--fix-one` is explicit and bounded
 - carry The Interdependent Way, UCNS, or org liturgy on the first screen
 
+## Repository examiner (BYOK)
+
+The inspect CLI is the first consumer of a repository evidence engine. A
+documentation generator builds on that same evidence substrate:
+
+```bash
+python -m pubskill_lib.examine --repo /path/to/repo --json            # dry run
+python -m pubskill_lib.examine --repo /path/to/repo --apply --narrate # write + assemble
+```
+
+With `--apply`, the examiner inventories actual code, writes a descriptive
+`NARRATIVE` msdmd block into each supported source file (never a `CONTRACT`,
+`CHECK`, `CAPABILITY`, or other normative declaration), maintains
+shebang-first RATIOS placement, and assembles `docs/examiner/EXAMINER.md`
+from the discovered module graph. Narratives are evidence-bound to the source
+hash that produced them; changed source without a re-narrate is marked stale.
+The tool never leaves the repository boundary it was pointed at.
+
+BYOK credentials come from the environment or a `.env` file and are never
+printed:
+
+```text
+OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL
+ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL / ANTHROPIC_MODEL
+```
+
+Multiple providers are attempted sequentially (fallback). Languages without
+a shipped ratio computer keep `hmmm` values; unsupported languages are
+skipped and reported as `hmmm`, never guessed.
+
 ## License
 
 MPL-2.0, same as skill-lib. Changes to MPL-covered files must be published.
