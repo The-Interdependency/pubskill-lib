@@ -1,13 +1,14 @@
-# Vendored skills
+# Local agent skills
 
-These skills are vendored from the canonical skill library.
+This directory contains repo-local copies of canonical skills from
+`The-Interdependency/skill-lib`.
 
-| Skill | Source | Pinned SHA |
-|---|---|---|
-| msdmd | The-Interdependency/skill-lib/msdmd | `be72da66a112d0632fd25480c1f51b6e69db4976` |
-| repo-audit-repair | The-Interdependency/skill-lib/repo-audit-repair | `be72da66a112d0632fd25480c1f51b6e69db4976` |
+Source commit: `c14ee9d500579a4b5d6821f62c9d82ca96e73608`
 
-Canon: https://github.com/The-Interdependency/skill-lib
+Repo-local copies are not the source of truth. Edit `skill-lib` first,
+then propagate from the canonical source.
 
-If skill-lib and this repo disagree, skill-lib wins for skill text; this repo wins
-for CLI entrypoint, fixtures, and public README. Do not vendor from unpinned main.
+Installed skills:
+
+- `msdmd/`
+- `repo-audit-repair/`
