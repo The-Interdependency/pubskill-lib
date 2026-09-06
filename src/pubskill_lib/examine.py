@@ -62,8 +62,9 @@ def _apply(root: Path, evidence_list: list[evidence.FileEvidence], provider_list
             continue
 
         new_text = text
-        values = ratios.compute_for(path, text, ev.marker)
-        new_text, ratio_changed = ratios.place_ratios(new_text, ev.marker, values)
+        engine = ratios.RatiosEngine()
+        values = engine.compute(path, text)
+        new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
         if ratio_changed:
             changed.append(f"{ev.path}:ratios")
 

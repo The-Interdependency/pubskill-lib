@@ -43,6 +43,76 @@ class RatiosWriterTests(unittest.TestCase):
         self.assertGreaterEqual(int(comment), 1)
 
 
+class RatiosEngineTests(unittest.TestCase):
+    def test_registry_detects_by_extension(self):
+        engine = ratios.RatiosEngine()
+        cases = {
+            "a.py": "python",
+            "b.js": "javascript-typescript",
+            "c.tsx": "javascript-typescript",
+            "d.c": "c-cpp",
+            "e.cpp": "c-cpp",
+            "f.java": "java",
+            "g.pl": "perl",
+            "h.rs": "rust",
+        }
+        for filename, expected in cases.items():
+            adapter = engine.adapter_for(Path(filename))
+            self.assertIsNotNone(adapter, filename)
+            self.assertEqual(expected, adapter.name)
+
+    def test_unknown_language_returns_all_hmmm(self):
+        engine = ratios.RatiosEngine()
+        values = engine.compute(Path("x.ml"), "let x = 1\n")
+        self.assertEqual({"loc_comments": "hmmm", "imports_exports": "hmmm", "calls_definitions": "hmmm"}, values)
+
+    def test_cpp_exports_unresolved_not_approximated(self):
+        engine = ratios.RatiosEngine()
+        values = engine.compute(Path("x.c"), '#include <stdio.h>\nint main(void) { printf("hi"); return 0; }\n')
+        self.assertEqual("hmmm", values["imports_exports"])
+        self.assertNotEqual("hmmm", values["loc_comments"])
+
+    def test_adapters_return_normalized_shape(self):
+        engine = ratios.RatiosEngine()
+        for adapter in engine.adapters:
+            with self.subTest(adapter=adapter.name):
+                values = adapter.compute("// nothing\ncode();\n")
+                self.assertEqual(set(ratios.RATIO_IDS), set(values))
+
+    def test_python_opening_boundary_respects_encoding_header(self):
+        from pubskill_lib import ratios_adapters
+
+        adapter = ratios_adapters.PythonAdapter()
+        lines = ["#!/usr/bin/env python3", "# -*- coding: utf-8 -*-", "import os"]
+        self.assertEqual([0, 1], adapter.opening_boundary(lines))
+        self.assertEqual(2, ratios.opening_index(lines, adapter))
+
+        new, _ = ratios.place_ratios(
+            "\n".join(lines) + "\n",
+            "#",
+            {"loc_comments": "1:0", "imports_exports": "1:0", "calls_definitions": "0:0"},
+            adapter,
+        )
+        out = new.splitlines()
+        self.assertTrue(out[0].startswith("#!"))
+        self.assertIn("coding", out[1])
+        self.assertTrue(out[2].startswith("# ratios:"))
+
+    def test_find_internal_dependencies_python(self):
+        from pubskill_lib import ratios_adapters
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pkg").mkdir()
+            dep_path = root / "pkg" / "tool.py"
+            lib_path = root / "pkg" / "lib.py"
+            dep_path.write_text("import lib\n", encoding="utf-8")
+            lib_path.write_text("", encoding="utf-8")
+            adapter = ratios_adapters.PythonAdapter()
+            deps = adapter.find_internal_dependencies(dep_path, {dep_path, lib_path})
+            self.assertIn(str(lib_path), deps)
+
+
 class MsdmdWriterTests(unittest.TestCase):
     def test_upsert_narrative_keeps_shebang_and_ratios(self):
         text = (
@@ -113,7 +183,9 @@ class ExamineCliTests(unittest.TestCase):
         self.assertTrue(shell[1].startswith("# ratios: loc_comments=hmmm"))
 
         ts = (self.root / "lib" / "util.ts").read_text().splitlines()
-        self.assertTrue(ts[0].startswith("// ratios: loc_comments=hmmm"))
+        self.assertTrue(ts[0].startswith("// ratios: loc_comments="))
+        self.assertNotIn("loc_comments=hmmm", ts[0])
+        self.assertIn("imports_exports=", ts[0])
 
         self.assertEqual((self.root / "tool.py").stat().st_mode & 0o111, 0o111)
         self.assertEqual((self.root / "run.sh").stat().st_mode & 0o111, 0o111)
