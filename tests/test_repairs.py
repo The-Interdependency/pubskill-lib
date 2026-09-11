@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pubskill_lib import audit, evidence, msdmd_writer, narrative, providers
+from pubskill_lib import audit, evidence, examine, msdmd_writer, narrative, providers, ratios
 
 
 class CredentialBoundaryTests(unittest.TestCase):
@@ -37,6 +37,12 @@ class CredentialBoundaryTests(unittest.TestCase):
             ):
                 merged = providers.env_with_dotenv(env_file)
             self.assertEqual("https://operator.example/v1", merged["OPENAI_BASE_URL"])
+
+    def test_blank_model_override_uses_provider_default(self):
+        openai = providers.OpenAIProvider({"OPENAI_API_KEY": "key", "OPENAI_MODEL": ""})
+        anthropic = providers.AnthropicProvider({"ANTHROPIC_API_KEY": "key", "ANTHROPIC_MODEL": ""})
+        self.assertEqual(openai.default_model(), openai.model)
+        self.assertEqual(anthropic.default_model(), anthropic.model)
 
 
 class NarrativeBoundaryTests(unittest.TestCase):
@@ -78,6 +84,39 @@ class NarrativeBoundaryTests(unittest.TestCase):
         self.assertEqual("fake", result.entry["provider"])
         self.assertEqual("model-1", result.entry["model"])
 
+    def test_generated_narrative_does_not_change_ratios(self):
+        class FakeProvider:
+            name = "fake"
+            model = "model-1"
+
+            def chat(self, system, user):
+                return "Generated prose mentions fake_call() and comments."
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "x.py"
+            original = "print('x')\n"
+            path.write_text(original, encoding="utf-8")
+            ev = evidence.read_evidence(root, path)
+            expected = ratios.RatiosEngine().compute(path, original)
+            examine._apply(root, [ev], [FakeProvider()], True)
+            written = evidence.read_evidence(root, path)
+            self.assertTrue(written.ratios_lines)
+            for key, value in expected.items():
+                self.assertIn(f"{key}={value}", written.ratios_lines[0])
+
+    def test_apply_skips_parser_supported_language_without_safe_ratio_adapter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "index.php"
+            original = "<?php\necho 'ok';\n"
+            path.write_text(original, encoding="utf-8")
+            ev = evidence.read_evidence(root, path)
+            self.assertIsNotNone(ev.marker)
+            _, report = examine._apply(root, [ev], [], False)
+            self.assertEqual(original, path.read_text(encoding="utf-8"))
+            self.assertEqual([], report["changed"])
+
 
 class CanonicalMarkerTests(unittest.TestCase):
     def test_evidence_uses_vendored_msdmd_registry(self):
@@ -111,6 +150,31 @@ class PackageScriptTests(unittest.TestCase):
             )
             document = audit.audit_path(root, "pin")
             self.assertFalse([f for f in document["findings"] if f["surface"] == "deps"])
+
+    def test_interpreter_flags_do_not_hide_missing_local_script(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(
+                json.dumps({"scripts": {
+                    "node": "node --trace-warnings missing.js",
+                    "python": "python -u missing.py",
+                    "shell": "bash -e missing.sh",
+                }}),
+                encoding="utf-8",
+            )
+            document = audit.audit_path(root, "pin")
+            claims = [f["claim"] for f in document["findings"] if f["surface"] == "deps"]
+            self.assertTrue(any("missing.js" in claim for claim in claims))
+            self.assertTrue(any("missing.py" in claim for claim in claims))
+            self.assertTrue(any("missing.sh" in claim for claim in claims))
+
+    def test_non_object_package_manifest_is_target_defect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text("[]\n", encoding="utf-8")
+            document = audit.audit_path(root, "pin")
+            claims = [f["claim"] for f in document["findings"] if f["surface"] == "deps"]
+            self.assertIn("package.json top level is not an object", claims)
 
 
 if __name__ == "__main__":
