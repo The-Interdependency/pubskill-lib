@@ -1,43 +1,36 @@
 """Evidence engine: inventory actual code before describing it.
 
-Language comment markers and entry grammar are loaded from the vendored
-canonical msdmd parser; this module does not maintain a second dialect.
-``sha256`` is the stable source evidence hash: generated examiner NARRATIVE
-blocks and RATIOS seals are excluded so the examiner cannot make its own
-evidence stale. ``raw_sha256`` retains the literal file-content hash.
+Language comment markers and entry grammar are loaded from the packaged copy of
+the pinned canonical msdmd parser; this module does not maintain a second
+dialect. ``sha256`` is the stable source evidence hash: generated examiner
+NARRATIVE blocks and RATIOS seals are excluded when the source can be decoded.
+``raw_sha256`` is always the literal file-byte hash.
 """
 
 from __future__ import annotations
 
 import hashlib
-import importlib.util
+import io
 import re
+import tokenize
 from dataclasses import dataclass, field
-from functools import lru_cache
 from pathlib import Path
 
+from . import _msdmd_universal as _canonical_msdmd
 from . import boundary
 
 SHEBANG_RE = re.compile(r"^#!.*$")
 _RATIOS_LINE_RE = re.compile(r"^(?:#|//|--|%|;|!|'|\*>)\s*ratios:\s*(.+?)\s*$")
+_PYTHON_SUFFIXES = {".py", ".pyw", ".pyi"}
 
 
-@lru_cache(maxsize=1)
 def _msdmd_parser():
-    """Load the pinned repo-local canonical msdmd parser module."""
-    repo = Path(__file__).resolve().parents[2]
-    parser_path = repo / ".agents" / "skills" / "msdmd" / "parsers" / "universal.py"
-    spec = importlib.util.spec_from_file_location("pubskill_lib._vendored_msdmd", parser_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load vendored msdmd parser: {parser_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    """Return the packaged, source-pinned canonical msdmd parser module."""
+    return _canonical_msdmd
 
 
-@lru_cache(maxsize=1)
 def _comment_markers() -> dict[str, str]:
-    """Load COMMENT_MARKERS from the pinned repo-local msdmd parser."""
+    """Load COMMENT_MARKERS from the packaged canonical msdmd parser."""
     markers = getattr(_msdmd_parser(), "COMMENT_MARKERS", {})
     return dict(markers) if isinstance(markers, dict) else {}
 
@@ -98,6 +91,20 @@ def _block_names(text: str, marker: str) -> list[str]:
     return list(dict.fromkeys(match.group("name") for match in start_re.finditer(text)))
 
 
+def _decode_source(path: Path, raw: bytes) -> tuple[str | None, str | None]:
+    """Decode source without changing byte identity; honor Python coding cookies."""
+    if path.suffix.lower() in _PYTHON_SUFFIXES:
+        try:
+            encoding, _ = tokenize.detect_encoding(io.BytesIO(raw).readline)
+            return raw.decode(encoding), None
+        except (LookupError, SyntaxError, UnicodeDecodeError) as exc:
+            return None, f"source encoding unresolved: {exc}"
+    try:
+        return raw.decode("utf-8"), None
+    except UnicodeDecodeError as exc:
+        return None, f"source encoding unresolved: {exc}"
+
+
 def read_evidence(root: Path, path: Path) -> FileEvidence:
     root = Path(root).resolve()
     rel = str(path.relative_to(root))
@@ -105,29 +112,37 @@ def read_evidence(root: Path, path: Path) -> FileEvidence:
     language = path.suffix.lower().lstrip(".") or "unknown"
     item = FileEvidence(path=rel, language=language, marker=marker)
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        raw = path.read_bytes()
     except OSError:
         item.hmmm.append("unreadable file")
         return item
 
-    raw_encoded = text.encode("utf-8", errors="replace")
-    stable_encoded = source_text(text, marker).encode("utf-8", errors="replace")
-    item.raw_sha256 = hashlib.sha256(raw_encoded).hexdigest()
-    item.sha256 = hashlib.sha256(stable_encoded).hexdigest()
-    item.size = len(raw_encoded)
+    item.raw_sha256 = hashlib.sha256(raw).hexdigest()
+    item.size = len(raw)
     try:
         item.executable = bool(path.stat().st_mode & 0o111)
     except OSError:
         pass
+
+    text, decode_hmmm = _decode_source(path, raw)
+    if text is None:
+        item.sha256 = item.raw_sha256
+        item.marker = None
+        item.hmmm.append(decode_hmmm or "source encoding unresolved")
+        item.hmmm.append("metadata-excluding source hash unavailable; mutation disabled")
+        return item
+
+    stable_encoded = source_text(text, marker).encode("utf-8")
+    item.sha256 = hashlib.sha256(stable_encoded).hexdigest()
 
     first_line = text.splitlines()[0].rstrip() if text.splitlines() else ""
     if SHEBANG_RE.match(first_line):
         item.shebang = first_line
 
     if marker is not None:
-        for raw in text.splitlines():
-            if _RATIOS_LINE_RE.match(raw.rstrip()):
-                item.ratios_lines.append(raw.rstrip())
+        for raw_line in text.splitlines():
+            if _RATIOS_LINE_RE.match(raw_line.rstrip()):
+                item.ratios_lines.append(raw_line.rstrip())
         parser = _msdmd_parser()
         for name in _block_names(text, marker):
             entries = parser.parse_text(text, name, marker)
