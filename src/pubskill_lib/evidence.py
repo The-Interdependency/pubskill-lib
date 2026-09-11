@@ -1,10 +1,10 @@
 """Evidence engine: inventory actual code before describing it.
 
-Language comment markers are loaded from the vendored canonical msdmd parser;
-this module does not maintain a second registry. ``sha256`` is the stable source
-evidence hash: generated examiner NARRATIVE blocks and RATIOS seals are excluded
-so the examiner cannot make its own evidence stale. ``raw_sha256`` retains the
-literal file-content hash.
+Language comment markers and entry grammar are loaded from the vendored
+canonical msdmd parser; this module does not maintain a second dialect.
+``sha256`` is the stable source evidence hash: generated examiner NARRATIVE
+blocks and RATIOS seals are excluded so the examiner cannot make its own
+evidence stale. ``raw_sha256`` retains the literal file-content hash.
 """
 
 from __future__ import annotations
@@ -23,16 +23,22 @@ _RATIOS_LINE_RE = re.compile(r"^(?:#|//|--|%|;|!|'|\*>)\s*ratios:\s*(.+?)\s*$")
 
 
 @lru_cache(maxsize=1)
-def _comment_markers() -> dict[str, str]:
-    """Load COMMENT_MARKERS from the pinned repo-local msdmd parser."""
+def _msdmd_parser():
+    """Load the pinned repo-local canonical msdmd parser module."""
     repo = Path(__file__).resolve().parents[2]
     parser_path = repo / ".agents" / "skills" / "msdmd" / "parsers" / "universal.py"
     spec = importlib.util.spec_from_file_location("pubskill_lib._vendored_msdmd", parser_path)
     if spec is None or spec.loader is None:
-        return {}
+        raise RuntimeError(f"cannot load vendored msdmd parser: {parser_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    markers = getattr(module, "COMMENT_MARKERS", {})
+    return module
+
+
+@lru_cache(maxsize=1)
+def _comment_markers() -> dict[str, str]:
+    """Load COMMENT_MARKERS from the pinned repo-local msdmd parser."""
+    markers = getattr(_msdmd_parser(), "COMMENT_MARKERS", {})
     return dict(markers) if isinstance(markers, dict) else {}
 
 
@@ -85,36 +91,11 @@ class FileEvidence:
     hmmm: list[str] = field(default_factory=list)
 
 
-def _block_name_re(marker: str) -> re.Pattern[str]:
+def _block_names(text: str, marker: str) -> list[str]:
+    """Return distinct declared block names; canonical parser owns entry grammar."""
     m = re.escape(marker)
-    return re.compile(
-        rf"^{m} === ([A-Z_]+) ===\s*$(?P<body>.*?)^{m} === END \1 ===\s*$",
-        re.MULTILINE | re.DOTALL,
-    )
-
-
-def _parse_block_entries(marker: str, body: str) -> list[dict]:
-    m = re.escape(marker)
-    id_re = re.compile(rf"^\s*{m}\s*id:\s*(?P<id>\S+)\s*$")
-    field_re = re.compile(rf"^\s*{m}\s+(?P<key>[a-z][a-z0-9_]*):\s*(?P<val>.+?)\s*$")
-    entries: list[dict[str, str]] = []
-    current: dict[str, str] | None = None
-    for line in body.splitlines():
-        line = line.rstrip()
-        match_id = id_re.match(line)
-        if match_id:
-            if current is not None:
-                entries.append(current)
-            current = {"id": match_id.group("id")}
-            continue
-        if current is None:
-            continue
-        match_field = field_re.match(line)
-        if match_field:
-            current[match_field.group("key")] = match_field.group("val")
-    if current is not None:
-        entries.append(current)
-    return entries
+    start_re = re.compile(rf"^{m} === (?P<name>[A-Z_]+) ===\s*$", re.MULTILINE)
+    return list(dict.fromkeys(match.group("name") for match in start_re.finditer(text)))
 
 
 def read_evidence(root: Path, path: Path) -> FileEvidence:
@@ -147,10 +128,10 @@ def read_evidence(root: Path, path: Path) -> FileEvidence:
         for raw in text.splitlines():
             if _RATIOS_LINE_RE.match(raw.rstrip()):
                 item.ratios_lines.append(raw.rstrip())
-        for match in _block_name_re(marker).finditer(text):
-            name = match.group(1)
-            entries = _parse_block_entries(marker, match.group("body"))
-            item.msdmd_blocks.setdefault(name, []).extend(entries)
+        parser = _msdmd_parser()
+        for name in _block_names(text, marker):
+            entries = parser.parse_text(text, name, marker)
+            item.msdmd_blocks[name] = entries
         item.narrative_entries = item.msdmd_blocks.get("NARRATIVE", [])
     else:
         item.hmmm.append(f"unsupported language for msdmd: .{language}")
