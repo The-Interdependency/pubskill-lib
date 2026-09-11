@@ -170,6 +170,7 @@ class ExamineCliTests(unittest.TestCase):
         self.assertEqual(before, (self.root / "tool.py").read_text())
 
     def test_apply_writes_ratios_and_assembles_docs(self):
+        shell_before = (self.root / "run.sh").read_bytes()
         result = self._run("--apply", "--out", "docs/examiner")
         self.assertEqual(0, result.returncode, result.stderr)
 
@@ -180,7 +181,8 @@ class ExamineCliTests(unittest.TestCase):
 
         shell = (self.root / "run.sh").read_text().splitlines()
         self.assertTrue(shell[0].startswith("#!"))
-        self.assertTrue(shell[1].startswith("# ratios: loc_comments=hmmm"))
+        self.assertEqual(shell_before, (self.root / "run.sh").read_bytes())
+        self.assertFalse(any("ratios:" in line for line in shell))
 
         ts = (self.root / "lib" / "util.ts").read_text().splitlines()
         self.assertTrue(ts[0].startswith("// ratios: loc_comments="))
