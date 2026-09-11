@@ -61,7 +61,7 @@ class Provider:
         self.name = name
         self.env = env
         self.key = env.get(self.key_env(), "")
-        self.model = env.get(self.model_env(), self.default_model())
+        self.model = env.get(self.model_env()) or self.default_model()
 
     def key_env(self) -> str:
         raise NotImplementedError
