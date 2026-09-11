@@ -86,7 +86,7 @@ export function parseText(
     "gm",
   );
   const idRe = new RegExp(`^\\s*${m}\\s*id:\\s*(\\S+)\\s*$`);
-  const fieldRe = new RegExp(`^\\s*${m}\\s+([a-z_]+):\\s*(.+?)\\s*$`);
+  const fieldRe = new RegExp(`^\\s*${m}\\s+([a-z_][a-z0-9_]*):\\s*(.+?)\\s*$`);
 
   const entries: Entry[] = [];
   let match: RegExpExecArray | null;
@@ -185,7 +185,7 @@ function ratiosLineRe(marker: string): RegExp {
 
 export function parseRatios(text: string, marker: string = "#"): Entry[] {
   const lineRe = ratiosLineRe(marker);
-  const tokenRe = /([a-z_]+)=(\S+)/g;
+  const tokenRe = /([a-z_][a-z0-9_]*)=(\S+)/g;
   const out: Entry[] = [];
   for (const raw of text.split("\n")) {
     const lm = lineRe.exec(raw.replace(/\s+$/, ""));
