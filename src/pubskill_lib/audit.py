@@ -28,7 +28,13 @@ ECHO_OR_NOOP_PATTERN = re.compile(r"\b(echo|true|exit\s+0|printf)\b", re.IGNOREC
 MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 PIN_PATTERN = re.compile(r"`([0-9a-f]{40})`")
 LOCAL_SCRIPT_INTERPRETERS = {"node", "python", "python3", "bash", "sh"}
-NON_FILE_MODES = {"-c", "-m", "-e", "--eval", "--print", "-p"}
+NON_FILE_MODES = {
+    "node": {"-e", "--eval", "-p", "--print"},
+    "python": {"-c", "-m"},
+    "python3": {"-c", "-m"},
+    "bash": {"-c"},
+    "sh": {"-c"},
+}
 
 
 class _Sink:
@@ -162,7 +168,7 @@ def _check_pyproject_scripts(target, sink):
 
 
 def _local_script_targets(command):
-    """Yield direct local script operands without mistaking interpreter flags for paths."""
+    """Yield direct local script operands without confusing interpreter modes with flags."""
     for segment in re.split(r"\s*(?:&&|;|\|)\s*", command):
         if not segment.strip():
             continue
@@ -172,10 +178,12 @@ def _local_script_targets(command):
             continue
         if not tokens or tokens[0] not in LOCAL_SCRIPT_INTERPRETERS:
             continue
+        interpreter = tokens[0]
+        non_file_modes = NON_FILE_MODES[interpreter]
         index = 1
         while index < len(tokens):
             token = tokens[index]
-            if token in NON_FILE_MODES:
+            if token in non_file_modes:
                 break
             if token.startswith("-"):
                 index += 1
@@ -205,9 +213,10 @@ def _check_package_scripts(target, sink):
             continue
         for raw_path in _local_script_targets(command):
             raw_path = raw_path.strip('"\'')
-            if raw_path.startswith("/") or "://" in raw_path:
+            if "://" in raw_path:
                 continue
-            local = (target / raw_path).resolve()
+            candidate = Path(raw_path)
+            local = candidate.resolve() if candidate.is_absolute() else (target / candidate).resolve()
             try:
                 local.relative_to(target.resolve())
             except ValueError:
