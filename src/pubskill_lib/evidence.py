@@ -1,7 +1,10 @@
 """Evidence engine: inventory actual code before describing it.
 
 Language comment markers are loaded from the vendored canonical msdmd parser;
-this module does not maintain a second registry.
+this module does not maintain a second registry. ``sha256`` is the stable source
+evidence hash: generated examiner NARRATIVE blocks and RATIOS seals are excluded
+so the examiner cannot make its own evidence stale. ``raw_sha256`` retains the
+literal file-content hash.
 """
 
 from __future__ import annotations
@@ -33,6 +36,39 @@ def _comment_markers() -> dict[str, str]:
     return dict(markers) if isinstance(markers, dict) else {}
 
 
+def source_text(text: str, marker: str | None) -> str:
+    """Return source text with complete generated NARRATIVE/RATIOS metadata removed.
+
+    Trailing blank lines are normalized because RATIOS placement already removes
+    them. Incomplete NARRATIVE fences are preserved rather than guessed away.
+    """
+    if marker is None:
+        return text
+
+    start = f"{marker} === NARRATIVE ==="
+    end = f"{marker} === END NARRATIVE ==="
+    lines = text.splitlines()
+    kept: list[str] = []
+    index = 0
+
+    while index < len(lines):
+        raw = lines[index]
+        if raw.rstrip() == start:
+            close = index + 1
+            while close < len(lines) and lines[close].rstrip() != end:
+                close += 1
+            if close < len(lines):
+                index = close + 1
+                continue
+        if not _RATIOS_LINE_RE.match(raw.rstrip()):
+            kept.append(raw)
+        index += 1
+
+    while kept and not kept[-1].strip():
+        kept.pop()
+    return "\n".join(kept) + ("\n" if kept else "")
+
+
 @dataclass
 class FileEvidence:
     path: str
@@ -43,6 +79,7 @@ class FileEvidence:
     msdmd_blocks: dict[str, list[dict]] = field(default_factory=dict)
     narrative_entries: list[dict] = field(default_factory=list)
     sha256: str = ""
+    raw_sha256: str = ""
     size: int = 0
     executable: bool = False
     hmmm: list[str] = field(default_factory=list)
@@ -92,9 +129,11 @@ def read_evidence(root: Path, path: Path) -> FileEvidence:
         item.hmmm.append("unreadable file")
         return item
 
-    encoded = text.encode("utf-8", errors="replace")
-    item.sha256 = hashlib.sha256(encoded).hexdigest()
-    item.size = len(encoded)
+    raw_encoded = text.encode("utf-8", errors="replace")
+    stable_encoded = source_text(text, marker).encode("utf-8", errors="replace")
+    item.raw_sha256 = hashlib.sha256(raw_encoded).hexdigest()
+    item.sha256 = hashlib.sha256(stable_encoded).hexdigest()
+    item.size = len(raw_encoded)
     try:
         item.executable = bool(path.stat().st_mode & 0o111)
     except OSError:

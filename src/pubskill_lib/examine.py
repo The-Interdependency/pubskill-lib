@@ -58,19 +58,18 @@ def _apply(
 
     for ev in evidence_list:
         path = boundary.assert_inside(root, root / ev.path)
-        text = _read_text(path)
+        original_text = _read_text(path)
         if ev.marker is None:
             continue
 
-        new_text = text
-        engine = ratios.RatiosEngine()
-        values = engine.compute(path, text)
-        new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
-        if ratio_changed:
-            changed.append(f"{ev.path}:ratios")
-
+        new_text = original_text
         if narrate:
-            result = narrative.narrate_file(ev, text, provider_list, now)
+            result = narrative.narrate_file(
+                ev,
+                evidence.source_text(original_text, ev.marker),
+                provider_list,
+                now,
+            )
             narratives[ev.path] = result.entry
             if result.hmmm:
                 result.entry["summary"] = result.entry["summary"] or "hmmm"
@@ -87,7 +86,13 @@ def _apply(
             if block_changed:
                 changed.append(f"{ev.path}:narrative")
 
-        if new_text != text:
+        engine = ratios.RatiosEngine()
+        values = engine.compute(path, new_text)
+        new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
+        if ratio_changed:
+            changed.append(f"{ev.path}:ratios")
+
+        if new_text != original_text:
             msdmd_writer.write_text_safely(path, new_text)
 
     return narratives, {"changed": changed, "narrated": len(narratives)}
