@@ -6,13 +6,13 @@ Clone this repo when you want a command that inspects a local repository and wri
 
 ## Status
 
-The inspect CLI works on `main`; the `v0.2.0` release tag is not published yet.
+The inspect CLI implementation passes the repository gate; the `v0.2.0` release tag is not published yet.
 
 | Claim | State |
 |---|---|
 | Canon | `The-Interdependency/skill-lib` |
 | This repo | distribution + public CLI + fixtures |
-| Clone / run / findings | **implemented on main** — release pending |
+| Clone / run / findings | **implementation ready** — release pending |
 | VM populate | `HANDOFF.vm.md` |
 | Source pin | `SOURCE.md` |
 
@@ -42,9 +42,10 @@ python -m pubskill_lib.audit PATH --out findings.json
 It writes:
 
 - identity when the target contains `.git` (remote, commit, dirty state)
-- README links to missing local files
+- README links to missing local files or paths that escape the repository
 - obvious test-workflow no-ops
 - Python `pyproject.toml` console scripts whose modules are missing
+- direct local `package.json` script targets whose referenced files are missing or escape the repository
 - findings classified as `defect`, `environment`, `external`, `policy`, or `hmmm`
 
 The inspector does **not** yet clone URLs, select remote commits, execute target tests, or repair the target. Those are later capabilities and must not be inferred from the schema.
