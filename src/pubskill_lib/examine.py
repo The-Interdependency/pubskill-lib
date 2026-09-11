@@ -55,11 +55,13 @@ def _apply(
     narratives: dict[str, dict[str, str]] = {}
     changed: list[str] = []
     now = datetime.now(timezone.utc).isoformat()
+    engine = ratios.RatiosEngine()
 
     for ev in evidence_list:
         path = boundary.assert_inside(root, root / ev.path)
         original_text = _read_text(path)
-        if ev.marker is None:
+        adapter = engine.adapter_for(path)
+        if ev.marker is None or adapter is None:
             continue
 
         new_text = original_text
@@ -86,8 +88,7 @@ def _apply(
             if block_changed:
                 changed.append(f"{ev.path}:narrative")
 
-        engine = ratios.RatiosEngine()
-        values = engine.compute(path, new_text)
+        values = engine.compute(path, evidence.source_text(new_text, ev.marker))
         new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
         if ratio_changed:
             changed.append(f"{ev.path}:ratios")
