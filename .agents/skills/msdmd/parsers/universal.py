@@ -100,7 +100,7 @@ def parse_text(text: str, block_name: str, marker: str = "#") -> list[dict]:
     block_re = _block_regex(block_name, marker)
     m = re.escape(marker)
     id_re = re.compile(rf"^\s*{m}\s*id:\s*(?P<id>\S+)\s*$")
-    field_re = re.compile(rf"^\s*{m}\s+(?P<key>[a-z_]+):\s*(?P<val>.+?)\s*$")
+    field_re = re.compile(rf"^\s*{m}\s+(?P<key>[a-z_][a-z0-9_]*):\s*(?P<val>.+?)\s*$")
 
     entries: list[dict] = []
     for block in block_re.finditer(text):
@@ -189,7 +189,7 @@ def walk_tree(
 # boundary to literal line 2:
 #     <marker> ratios: loc_comments=N:M imports_exports=N:M calls_definitions=N:M
 RATIO_IDS = ("loc_comments", "imports_exports", "calls_definitions")
-_RATIOS_TOKEN_RE = re.compile(r"(?P<key>[a-z_]+)=(?P<val>\S+)")
+_RATIOS_TOKEN_RE = re.compile(r"(?P<key>[a-z_][a-z0-9_]*)=(?P<val>\S+)")
 
 
 def _ratios_line_re(marker: str) -> re.Pattern[str]:
