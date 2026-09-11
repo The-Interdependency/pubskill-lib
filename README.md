@@ -2,17 +2,17 @@
 
 Public distribution of [skill-lib](https://github.com/The-Interdependency/skill-lib).
 
-Clone this repo when you want a command that inspects a repository and writes findings. The full catalog, org doctrine, and unfinished skills stay in skill-lib. This repo is the subset a stranger can run.
+Clone this repo when you want a command that inspects a local repository and writes findings. The full catalog, org doctrine, and unfinished skills stay in skill-lib. This repo is the subset a stranger can run.
 
 ## Status
 
-The inspect CLI ships. Clone, run, get findings.
+The inspect CLI works on `main`; the `v0.2.0` release tag is not published yet.
 
 | Claim | State |
 |---|---|
 | Canon | `The-Interdependency/skill-lib` |
 | This repo | distribution + public CLI + fixtures |
-| Clone / run / findings | **shipped** — `v0.2` inspect; see `HANDOFF.md` |
+| Clone / run / findings | **implemented on main** — release pending |
 | VM populate | `HANDOFF.vm.md` |
 | Source pin | `SOURCE.md` |
 
@@ -29,55 +29,46 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
 ```
 
-Those commands are the definition of done for the first utility tag (`v0.2.0`). They run on a clean clone.
+Those commands are the definition of done for the first utility tag (`v0.2.0`). They run in GitHub CI from a clean checkout; publish the tag only after the release gate is explicitly completed.
 
-## What this will do
+## Inspect CLI
 
-Inspect one repository path or URL at a named commit and write:
+`v0.2` inspects one **local repository path** without executing the target repository:
 
-- identity (remote, commit, dirty state, declared instructions)
-- claimed gates vs files that exist
-- obvious dependency and docs drift
+```bash
+python -m pubskill_lib.audit PATH --out findings.json
+```
+
+It writes:
+
+- identity when the target contains `.git` (remote, commit, dirty state)
+- README links to missing local files
+- obvious test-workflow no-ops
+- Python `pyproject.toml` console scripts whose modules are missing
 - findings classified as `defect`, `environment`, `external`, `policy`, or `hmmm`
 
-`--run` is opt-in. `verified` is stamped only on a finding whose gate was re-run.
-
-## What this will not do
-
-- audit the whole internet
-- execute private CI secrets by default
-- rewrite a repo unless `--fix-one` is explicit and bounded
-- carry The Interdependent Way, UCNS, or org liturgy on the first screen
+The inspector does **not** yet clone URLs, select remote commits, execute target tests, or repair the target. Those are later capabilities and must not be inferred from the schema.
 
 ## Repository examiner (BYOK)
 
-The inspect CLI is the first consumer of a repository evidence engine. A
-documentation generator builds on that same evidence substrate:
+A separate documentation examiner builds on the repository evidence substrate:
 
 ```bash
-python -m pubskill_lib.examine --repo /path/to/repo --json            # dry run
-python -m pubskill_lib.examine --repo /path/to/repo --apply --narrate # write + assemble
+python -m pubskill_lib.examine --repo /path/to/repo --json
+python -m pubskill_lib.examine --repo /path/to/repo --apply --narrate
 ```
 
-With `--apply`, the examiner inventories actual code, writes a descriptive
-`NARRATIVE` msdmd block into each supported source file (never a `CONTRACT`,
-`CHECK`, `CAPABILITY`, or other normative declaration), maintains
-shebang-first RATIOS placement, and assembles `docs/examiner/EXAMINER.md`
-from the discovered module graph. Narratives are evidence-bound to the source
-hash that produced them; changed source without a re-narrate is marked stale.
-The tool never leaves the repository boundary it was pointed at.
+With `--apply`, the examiner inventories actual code, writes descriptive `NARRATIVE` msdmd blocks into supported source files, maintains source-boundary RATIOS placement, and assembles `docs/examiner/EXAMINER.md`. Narratives are evidence-bound to the source hash that produced them; changed source without a re-narrate is marked stale. The tool never writes outside the repository boundary it was pointed at.
 
-BYOK credentials come from the environment or a `.env` file and are never
-printed:
+BYOK credentials may come from the process environment or a `.env` file. `.env` files are ignored by this repository. To prevent a target repository from redirecting an operator credential, provider base-URL overrides are accepted only from the process environment, not from `.env`:
 
 ```text
-OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL
-ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL / ANTHROPIC_MODEL
+OPENAI_API_KEY / OPENAI_MODEL
+ANTHROPIC_API_KEY / ANTHROPIC_MODEL
+OPENAI_BASE_URL / ANTHROPIC_BASE_URL   # process environment only
 ```
 
-Multiple providers are attempted sequentially (fallback). Languages without
-a shipped ratio computer keep `hmmm` values; unsupported languages are
-skipped and reported as `hmmm`, never guessed.
+Multiple configured providers are attempted sequentially as fallback. Unsupported or not-faithfully-computable metrics remain `hmmm`; they are not guessed.
 
 ## License
 
@@ -85,4 +76,4 @@ MPL-2.0, same as skill-lib. Changes to MPL-covered files must be published.
 
 ## Canon
 
-Do not add skills here first. Add them in skill-lib, mark them `runnable`, pin the SHA in `SOURCE.md`, then propagate.
+Do not add skills here first. Add them in skill-lib, mark them appropriately, pin the SHA in `SOURCE.md`, then propagate the public slice.

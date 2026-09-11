@@ -3,9 +3,8 @@
 Usage:
     python -m pubskill_lib.audit PATH --out findings.json
 
-v0.2 inspect only: read declared files, record identity, flag evidenced
-repository defects. Never install target deps, never run target tests.
-Exit 0 when the tool ran; exit 3 on tool/schema failures.
+v0.2 inspect only: read declared files, record identity, and flag evidenced
+repository defects. It never installs target dependencies or runs target tests.
 """
 
 import argparse
@@ -27,6 +26,9 @@ TEST_RUNNER_PATTERN = re.compile(
 ECHO_OR_NOOP_PATTERN = re.compile(r"\b(echo|true|exit\s+0|printf)\b", re.IGNORECASE)
 MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 PIN_PATTERN = re.compile(r"`([0-9a-f]{40})`")
+LOCAL_SCRIPT_PATTERN = re.compile(
+    r"(?:^|(?:&&|;|\|)\s*)(?:node|python(?:3)?|bash|sh)\s+([^\s;&|]+)"
+)
 
 
 class _Sink:
@@ -65,12 +67,13 @@ def _git_identity(target):
 
     def run(args):
         try:
-            return subprocess.run(
+            result = subprocess.run(
                 ["git", "-C", str(target), *args],
                 capture_output=True,
                 text=True,
                 timeout=10,
-            ).stdout.strip()
+            )
+            return result.stdout.strip() if result.returncode == 0 else None
         except (OSError, subprocess.SubprocessError):
             return None
 
@@ -95,12 +98,13 @@ def _check_readme_links(target, sink):
                 if local.startswith("/"):
                     continue
                 resolved = (readme.parent / local).resolve()
+                try:
+                    resolved.relative_to(target.resolve())
+                except ValueError:
+                    sink.add("docs", f"README link escapes repository: {dest}", f"{name}:{lineno}")
+                    continue
                 if not resolved.exists():
-                    sink.add(
-                        "docs",
-                        f"README links to {dest}",
-                        f"{name}:{lineno}",
-                    )
+                    sink.add("docs", f"README links to {dest}", f"{name}:{lineno}")
 
 
 def _check_ci_workflows(target, sink):
@@ -135,30 +139,60 @@ def _module_exists(target, module):
     return any(candidate.exists() for candidate in candidates)
 
 
-def _check_declared_scripts(target, sink):
+def _check_pyproject_scripts(target, sink):
     pyproject = target / "pyproject.toml"
     text = _read_text(pyproject)
     if text is None:
         return
     try:
         import tomllib
-    except ImportError:  # pragma: no cover - requires Python 3.11+
-        return
-    try:
         data = tomllib.loads(text)
-    except Exception:
+    except (ImportError, ValueError):
         return
     scripts = (data.get("project") or {}).get("scripts") or {}
     for name in sorted(scripts):
         entry = str(scripts[name])
         module = entry.split(":", 1)[0].strip()
-        if not module or _module_exists(target, module):
+        if module and not _module_exists(target, module):
+            sink.add(
+                "deps",
+                f"declared script {name} points to missing module {module}",
+                "pyproject.toml [project.scripts]",
+            )
+
+
+def _check_package_scripts(target, sink):
+    package = target / "package.json"
+    text = _read_text(package)
+    if text is None:
+        return
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        sink.add("deps", "package.json is not valid JSON", "package.json")
+        return
+    scripts = data.get("scripts") or {}
+    if not isinstance(scripts, dict):
+        return
+    for name, command in sorted(scripts.items()):
+        if not isinstance(command, str):
             continue
-        sink.add(
-            "deps",
-            f"declared script {name} points to missing module {module}",
-            "pyproject.toml [project.scripts]",
-        )
+        for match in LOCAL_SCRIPT_PATTERN.finditer(command):
+            raw_path = match.group(1).strip('"\'')
+            if raw_path.startswith(("-", "/")) or "://" in raw_path:
+                continue
+            local = (target / raw_path).resolve()
+            try:
+                local.relative_to(target.resolve())
+            except ValueError:
+                sink.add("deps", f"package script {name} escapes repository via {raw_path}", "package.json [scripts]")
+                continue
+            if not local.exists():
+                sink.add(
+                    "deps",
+                    f"package script {name} points to missing local file {raw_path}",
+                    "package.json [scripts]",
+                )
 
 
 def _read_source_pin():
@@ -169,7 +203,6 @@ def _read_source_pin():
 
 
 def audit_path(target_path, source_pin=None):
-    """Inspect one repository path and return a schema-valid document."""
     target = Path(target_path)
     source_pin = source_pin or _read_source_pin()
     document = new_document(source_pin, target_path)
@@ -191,9 +224,14 @@ def audit_path(target_path, source_pin=None):
         surfaces.append("ci")
         _check_ci_workflows(target, sink)
 
-    if (target / "pyproject.toml").exists() or (target / "package.json").exists():
+    has_pyproject = (target / "pyproject.toml").exists()
+    has_package = (target / "package.json").exists()
+    if has_pyproject or has_package:
         surfaces.append("deps")
-        _check_declared_scripts(target, sink)
+        if has_pyproject:
+            _check_pyproject_scripts(target, sink)
+        if has_package:
+            _check_package_scripts(target, sink)
 
     document["surfaces"] = surfaces
     document["findings"] = sink.finalize()
@@ -203,7 +241,7 @@ def audit_path(target_path, source_pin=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="python -m pubskill_lib.audit")
-    parser.add_argument("path", help="repository path to inspect")
+    parser.add_argument("path", help="local repository path to inspect")
     parser.add_argument("--out", required=True, help="findings.json output path")
     args = parser.parse_args(argv)
 
@@ -214,7 +252,7 @@ def main(argv=None):
 
     try:
         document = audit_path(target)
-    except Exception as exc:  # tool/schema failure, never the target's fault
+    except Exception as exc:
         print(f"pubskill_lib.audit: tool failure: {exc}", file=sys.stderr)
         return 3
 

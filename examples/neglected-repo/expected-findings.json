@@ -1,19 +1,14 @@
 {
   "schema_version": 1,
   "tool": "pubskill-lib",
-  "source_pin": "be72da66a112d0632fd25480c1f51b6e69db4976",
+  "source_pin": "c14ee9d500579a4b5d6821f62c9d82ca96e73608",
   "target": {
     "path": "examples/neglected-repo",
     "commit": "hmmm",
     "remote": "hmmm",
     "dirty": false
   },
-  "surfaces": [
-    "identity",
-    "docs",
-    "ci",
-    "deps"
-  ],
+  "surfaces": ["identity", "docs", "ci", "deps"],
   "findings": [
     {
       "id": "F001",
@@ -43,7 +38,5 @@
       "verified": false
     }
   ],
-  "hmmm": [
-    "target has no .git directory; identity unresolved"
-  ]
+  "hmmm": ["target has no .git directory; identity unresolved"]
 }

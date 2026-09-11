@@ -4,11 +4,8 @@ Usage:
     python -m pubskill_lib.examine [--repo PATH] [--apply] [--narrate]
                                    [--out DIR] [--env FILE]
 
-Layers are separable: evidence (inventory), model reasoning (narrate),
-source mutation (msdmd writer + RATIOS), documentation assembly, and
-provider access each live in their own module and can be used directly.
-
-Default is a dry run: report what would change without writing anything.
+Default is a dry run. Evidence, model reasoning, source mutation,
+documentation assembly, and provider access remain separate layers.
 """
 
 from __future__ import annotations
@@ -16,7 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -50,7 +46,12 @@ def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
     }
 
 
-def _apply(root: Path, evidence_list: list[evidence.FileEvidence], provider_list: list[providers.Provider], narrate: bool) -> tuple[dict, dict]:
+def _apply(
+    root: Path,
+    evidence_list: list[evidence.FileEvidence],
+    provider_list: list[providers.Provider],
+    narrate: bool,
+) -> tuple[dict, dict]:
     narratives: dict[str, dict[str, str]] = {}
     changed: list[str] = []
     now = datetime.now(timezone.utc).isoformat()
@@ -80,7 +81,9 @@ def _apply(root: Path, evidence_list: list[evidence.FileEvidence], provider_list
 
         entry = narratives.get(ev.path)
         if entry:
-            new_text, block_changed = msdmd_writer.upsert_narrative(new_text, ev.marker, entry)
+            new_text, block_changed = msdmd_writer.upsert_narrative(
+                new_text, ev.marker, entry, path
+            )
             if block_changed:
                 changed.append(f"{ev.path}:narrative")
 
@@ -93,7 +96,7 @@ def _apply(root: Path, evidence_list: list[evidence.FileEvidence], provider_list
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m pubskill_lib.examine")
     parser.add_argument("--repo", help="repository path (default: current directory)")
-    parser.add_argument("--apply", action="store_true", help="write msdmd + RATIOS + docs (default: dry run)")
+    parser.add_argument("--apply", action="store_true", help="write msdmd + RATIOS + docs")
     parser.add_argument("--narrate", action="store_true", help="call BYOK providers for narratives")
     parser.add_argument("--env", default=".env", help=".env file for BYOK credentials")
     parser.add_argument("--out", default="docs/examiner", help="documentation output directory")

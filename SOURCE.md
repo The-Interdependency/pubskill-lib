@@ -4,10 +4,10 @@ Canon: https://github.com/The-Interdependency/skill-lib
 
 | Field | Value |
 |---|---|
-| Pinned SHA | `be72da66a112d0632fd25480c1f51b6e69db4976` |
-| Pinned date | 2026-09-04 |
-| Pin meaning | last observed skill-lib `main` when pubskill-lib was created |
-| Runnable subset | `msdmd` (runnable), `repo-audit-repair` (contract) — set in skill-lib `skills.json` after the pin |
+| Pinned SHA | `c14ee9d500579a4b5d6821f62c9d82ca96e73608` |
+| Pinned date | 2026-09-06 |
+| Pin meaning | exact canonical source used for the vendored public skill slice |
+| Runnable subset | `msdmd` (runnable), `repo-audit-repair` (contract) |
 
 Update this file in the same commit that propagates vendored skills.
 

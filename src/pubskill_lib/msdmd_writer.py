@@ -1,15 +1,16 @@
 """msdmd NARRATIVE writer: generated explanation is descriptive evidence.
 
-The NARRATIVE block is a normal msdmd fenced block, never a CONTRACT, CHECK,
-CAPABILITY, OWNERS, DOCS, or other normative declaration. It carries the
-content hash that produced it so stale narrative can be detected.
+NARRATIVE placement shares the language opening-boundary rules used by the
+RATIOS engine so metadata never displaces an interpreter or protected source
+prologue.
 """
 
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
+
+from . import ratios
 
 NARRATIVE_BLOCK = "NARRATIVE"
 
@@ -31,26 +32,26 @@ def _block_lines(marker: str, entry: dict[str, str]) -> list[str]:
 
 
 def narrative_id(sha256: str) -> str:
-    """Stable, refactor-safe entry id derived from the evidence hash."""
     return f"examiner_{sha256[:16]}"
 
 
-def upsert_narrative(text: str, marker: str, entry: dict[str, str]) -> tuple[str, bool]:
-    """Replace any existing NARRATIVE blocks with ``entry``, keeping the
-    shebang first and the ratios bookends where they were."""
-    fence = _fence_re(marker)
-    body = fence.sub("", text).rstrip("\n")
+def upsert_narrative(
+    text: str,
+    marker: str,
+    entry: dict[str, str],
+    path: Path | None = None,
+) -> tuple[str, bool]:
+    """Replace NARRATIVE blocks without crossing the protected opening boundary."""
+    body = _fence_re(marker).sub("", text).rstrip("\n")
     block = "\n".join(_block_lines(marker, entry))
-
     lines = body.splitlines()
+
+    adapter = ratios.RatiosEngine().adapter_for(path) if path is not None else None
+    insert_at = ratios.opening_index(lines, adapter)
     ratios_prefix = f"{marker} ratios:"
-    insert_at = 0
-    if lines and lines[0].startswith("#!"):
-        insert_at = 1
-        if len(lines) > 1 and lines[1].lstrip().startswith(ratios_prefix):
-            insert_at = 2
-    elif lines and lines[0].lstrip().startswith(ratios_prefix):
-        insert_at = 1
+    if insert_at < len(lines) and lines[insert_at].lstrip().startswith(ratios_prefix):
+        insert_at += 1
+
     lines.insert(insert_at, block)
     new_text = "\n".join(lines) + "\n"
     return new_text, new_text != text
