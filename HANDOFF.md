@@ -39,7 +39,7 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/out.json
 ```
 
-The first release tag is exactly `v0.2.0`. README may say the implementation is ready on `main` before that tag exists; it must not claim the release exists before the tag is published.
+GitHub CI executes this gate on Python 3.11 and 3.12. The first release tag is exactly `v0.2.0`. README may say the implementation is ready on `main` before that tag exists; it must not claim the release exists before the tag is published.
 
 ## Generated metadata
 
@@ -47,5 +47,4 @@ The first release tag is exactly `v0.2.0`. README may say the implementation is 
 
 ## hmmm
 
-- Python 3.11 is part of the declared `>=3.11` support range but the current GitHub CI lane is Python 3.12 only. Add a 3.11 CI lane before treating cross-version support as independently witnessed.
-- Remote inspection/execution/repair semantics are deliberately outside v0.2; version and specify them before implementation.
+- Remote inspection, execution, and repair semantics are deliberately outside v0.2; version and specify them before implementation.
