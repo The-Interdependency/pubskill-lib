@@ -96,7 +96,7 @@ def _block_name_re(marker: str) -> re.Pattern[str]:
 def _parse_block_entries(marker: str, body: str) -> list[dict]:
     m = re.escape(marker)
     id_re = re.compile(rf"^\s*{m}\s*id:\s*(?P<id>\S+)\s*$")
-    field_re = re.compile(rf"^\s*{m}\s+(?P<key>[a-z_]+):\s*(?P<val>.+?)\s*$")
+    field_re = re.compile(rf"^\s*{m}\s+(?P<key>[a-z][a-z0-9_]*):\s*(?P<val>.+?)\s*$")
     entries: list[dict[str, str]] = []
     current: dict[str, str] | None = None
     for line in body.splitlines():
