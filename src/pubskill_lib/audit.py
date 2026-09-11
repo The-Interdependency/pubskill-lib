@@ -10,6 +10,7 @@ repository defects. It never installs target dependencies or runs target tests.
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -26,9 +27,8 @@ TEST_RUNNER_PATTERN = re.compile(
 ECHO_OR_NOOP_PATTERN = re.compile(r"\b(echo|true|exit\s+0|printf)\b", re.IGNORECASE)
 MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 PIN_PATTERN = re.compile(r"`([0-9a-f]{40})`")
-LOCAL_SCRIPT_PATTERN = re.compile(
-    r"(?:^|(?:&&|;|\|)\s*)(?:node|python(?:3)?|bash|sh)\s+([^\s;&|]+)"
-)
+LOCAL_SCRIPT_INTERPRETERS = {"node", "python", "python3", "bash", "sh"}
+NON_FILE_MODES = {"-c", "-m", "-e", "--eval", "--print", "-p"}
 
 
 class _Sink:
@@ -161,6 +161,29 @@ def _check_pyproject_scripts(target, sink):
             )
 
 
+def _local_script_targets(command):
+    """Yield direct local script operands without mistaking interpreter flags for paths."""
+    for segment in re.split(r"\s*(?:&&|;|\|)\s*", command):
+        if not segment.strip():
+            continue
+        try:
+            tokens = shlex.split(segment)
+        except ValueError:
+            continue
+        if not tokens or tokens[0] not in LOCAL_SCRIPT_INTERPRETERS:
+            continue
+        index = 1
+        while index < len(tokens):
+            token = tokens[index]
+            if token in NON_FILE_MODES:
+                break
+            if token.startswith("-"):
+                index += 1
+                continue
+            yield token
+            break
+
+
 def _check_package_scripts(target, sink):
     package = target / "package.json"
     text = _read_text(package)
@@ -171,15 +194,18 @@ def _check_package_scripts(target, sink):
     except json.JSONDecodeError:
         sink.add("deps", "package.json is not valid JSON", "package.json")
         return
+    if not isinstance(data, dict):
+        sink.add("deps", "package.json top level is not an object", "package.json")
+        return
     scripts = data.get("scripts") or {}
     if not isinstance(scripts, dict):
         return
     for name, command in sorted(scripts.items()):
         if not isinstance(command, str):
             continue
-        for match in LOCAL_SCRIPT_PATTERN.finditer(command):
-            raw_path = match.group(1).strip('"\'')
-            if raw_path.startswith(("-", "/")) or "://" in raw_path:
+        for raw_path in _local_script_targets(command):
+            raw_path = raw_path.strip('"\'')
+            if raw_path.startswith("/") or "://" in raw_path:
                 continue
             local = (target / raw_path).resolve()
             try:
