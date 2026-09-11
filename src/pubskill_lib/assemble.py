@@ -1,16 +1,16 @@
-"""Documentation assembly from the discovered module graph.
+"""Documentation assembly from discovered repository structure.
 
-Structure follows the architecture actually discovered, not directory depth
-mechanically mirrored:
+The assembler organizes inventoried files by their actual source paths:
 
     volume  -> one markdown document per repository
-    parts   -> top-level directories that contain modules
-    chapters-> nested directories with at least one module
-    sections-> individual module files
+    parts   -> top-level directories that contain inventoried files
+    chapters-> nested directories with at least one inventoried file
+    sections-> individual files
     lists   -> narrative summaries and gap/hmmm roll-ups
 
-Files that exist but produced no narrative appear as lists with their hmmm
-state, so gaps remain visible instead of being invented.
+This is a filesystem-derived documentation hierarchy, not a dependency graph.
+Dependency discovery may inform a future renderer, but this module does not
+claim graph semantics it does not consume.
 """
 
 from __future__ import annotations
@@ -48,22 +48,32 @@ def _heading(path: str) -> str:
     return path.replace("_", " ").replace("-", " ")
 
 
-def build_structure(evidence_list: list[FileEvidence], narratives: dict[str, dict[str, str]]) -> dict[str, Part]:
+def build_structure(
+    evidence_list: list[FileEvidence], narratives: dict[str, dict[str, str]]
+) -> dict[str, Part]:
     parts: dict[str, Part] = {}
     for ev in evidence_list:
         entry = narratives.get(ev.path)
         summary = entry.get("summary", "") if entry else ""
         stale = bool(entry) and is_stale(entry, ev.sha256)
-        hmmm = [h for h in ev.hmmm]
+        hmmm = list(ev.hmmm)
         if ev.marker is not None and not entry:
             hmmm.append("no narrative generated")
-        section = Section(path=ev.path, heading=_heading(ev.path), summary=summary, stale=stale, hmmm=hmmm)
+        section = Section(
+            path=ev.path,
+            heading=_heading(ev.path),
+            summary=summary,
+            stale=stale,
+            hmmm=hmmm,
+        )
 
         rel = Path(ev.path)
         top = rel.parts[0] if len(rel.parts) > 1 else "(root)"
         part = parts.setdefault(top, Part(title=_heading(top)))
         chapter_key = "/".join(rel.parts[1:-1]) or "(root)"
-        chapter = part.chapters.setdefault(chapter_key, Chapter(title=_heading(chapter_key)))
+        chapter = part.chapters.setdefault(
+            chapter_key, Chapter(title=_heading(chapter_key))
+        )
         chapter.sections.append(section)
     return parts
 
@@ -85,7 +95,11 @@ def _render_section(section: Section) -> list[str]:
     return lines
 
 
-def render_markdown(root: Path, evidence_list: list[FileEvidence], narratives: dict[str, dict[str, str]]) -> str:
+def render_markdown(
+    root: Path,
+    evidence_list: list[FileEvidence],
+    narratives: dict[str, dict[str, str]],
+) -> str:
     parts = build_structure(evidence_list, narratives)
     lines = [
         "# Repository examination",
@@ -112,11 +126,18 @@ def render_markdown(root: Path, evidence_list: list[FileEvidence], narratives: d
     return "\n".join(lines)
 
 
-def assemble_docs(root: Path, evidence_list: list[FileEvidence], narratives: dict[str, dict[str, str]], out_dir: Path) -> Path:
+def assemble_docs(
+    root: Path,
+    evidence_list: list[FileEvidence],
+    narratives: dict[str, dict[str, str]],
+    out_dir: Path,
+) -> Path:
     """Write the assembled volume and return its path."""
     root = boundary.assert_inside(root, root)
     out = boundary.assert_inside(root, out_dir)
     out.mkdir(parents=True, exist_ok=True)
     volume = out / "EXAMINER.md"
-    volume.write_text(render_markdown(root, evidence_list, narratives), encoding="utf-8")
+    volume.write_text(
+        render_markdown(root, evidence_list, narratives), encoding="utf-8"
+    )
     return volume
