@@ -1,5 +1,6 @@
 """Regression tests for audit findings repaired on 2026-09-10."""
 
+import hashlib
 import json
 import os
 import tempfile
@@ -125,6 +126,29 @@ class CanonicalMarkerTests(unittest.TestCase):
         self.assertEqual("//", markers[".ts"])
         self.assertIn(".ps1", markers)
 
+    def test_raw_sha256_hashes_literal_python_bytes_and_honors_cookie(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "latin.py"
+            raw = b"# -*- coding: latin-1 -*-\nname = 'caf\xe9'\n"
+            path.write_bytes(raw)
+            item = evidence.read_evidence(root, path)
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), item.raw_sha256)
+            self.assertEqual(len(raw), item.size)
+            self.assertEqual("#", item.marker)
+            self.assertFalse(item.hmmm)
+
+    def test_undecodable_non_python_source_is_hmmm_and_not_mutable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "bad.js"
+            raw = b"// invalid utf8: \xff\n"
+            path.write_bytes(raw)
+            item = evidence.read_evidence(root, path)
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), item.raw_sha256)
+            self.assertIsNone(item.marker)
+            self.assertTrue(any("encoding unresolved" in text for text in item.hmmm))
+
 
 class PackageScriptTests(unittest.TestCase):
     def test_missing_local_package_script_is_a_defect(self):
@@ -167,6 +191,31 @@ class PackageScriptTests(unittest.TestCase):
             self.assertTrue(any("missing.js" in claim for claim in claims))
             self.assertTrue(any("missing.py" in claim for claim in claims))
             self.assertTrue(any("missing.sh" in claim for claim in claims))
+
+    def test_interpreter_non_file_modes_do_not_invent_script_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(
+                json.dumps({"scripts": {
+                    "node": "node -e console.log('ok')",
+                    "python": "python -m http.server",
+                    "shell": "bash -c 'echo ok'",
+                }}),
+                encoding="utf-8",
+            )
+            document = audit.audit_path(root, "pin")
+            self.assertFalse([f for f in document["findings"] if f["surface"] == "deps"])
+
+    def test_absolute_local_package_script_reports_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(
+                json.dumps({"scripts": {"build": "node /opt/project/build.js"}}),
+                encoding="utf-8",
+            )
+            document = audit.audit_path(root, "pin")
+            claims = [f["claim"] for f in document["findings"] if f["surface"] == "deps"]
+            self.assertTrue(any("escapes repository via /opt/project/build.js" in claim for claim in claims))
 
     def test_non_object_package_manifest_is_target_defect(self):
         with tempfile.TemporaryDirectory() as tmp:
