@@ -31,6 +31,11 @@ class PublicationProvenanceTests(unittest.TestCase):
         )
         self.assertEqual(_source_pin(), expected["source_pin"])
 
+    def test_packaged_parser_matches_vendored_canonical_bytes(self):
+        vendored = REPO / ".agents" / "skills" / "msdmd" / "parsers" / "universal.py"
+        packaged = REPO / "src" / "pubskill_lib" / "_msdmd_universal.py"
+        self.assertEqual(vendored.read_bytes(), packaged.read_bytes())
+
     def test_local_secret_files_are_ignored(self):
         ignore = (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertIn(".env", ignore)
