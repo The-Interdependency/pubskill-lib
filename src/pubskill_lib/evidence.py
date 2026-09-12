@@ -81,6 +81,7 @@ class FileEvidence:
     raw_sha256: str = ""
     size: int = 0
     executable: bool = False
+    encoding: str | None = "utf-8"
     hmmm: list[str] = field(default_factory=list)
 
 
@@ -91,18 +92,18 @@ def _block_names(text: str, marker: str) -> list[str]:
     return list(dict.fromkeys(match.group("name") for match in start_re.finditer(text)))
 
 
-def _decode_source(path: Path, raw: bytes) -> tuple[str | None, str | None]:
+def _decode_source(path: Path, raw: bytes) -> tuple[str | None, str | None, str | None]:
     """Decode source without changing byte identity; honor Python coding cookies."""
     if path.suffix.lower() in _PYTHON_SUFFIXES:
         try:
             encoding, _ = tokenize.detect_encoding(io.BytesIO(raw).readline)
-            return raw.decode(encoding), None
+            return raw.decode(encoding), encoding, None
         except (LookupError, SyntaxError, UnicodeDecodeError) as exc:
-            return None, f"source encoding unresolved: {exc}"
+            return None, None, f"source encoding unresolved: {exc}"
     try:
-        return raw.decode("utf-8"), None
+        return raw.decode("utf-8"), "utf-8", None
     except UnicodeDecodeError as exc:
-        return None, f"source encoding unresolved: {exc}"
+        return None, None, f"source encoding unresolved: {exc}"
 
 
 def read_evidence(root: Path, path: Path) -> FileEvidence:
@@ -124,7 +125,7 @@ def read_evidence(root: Path, path: Path) -> FileEvidence:
     except OSError:
         pass
 
-    text, decode_hmmm = _decode_source(path, raw)
+    text, item.encoding, decode_hmmm = _decode_source(path, raw)
     if text is None:
         item.sha256 = item.raw_sha256
         item.marker = None

@@ -50,6 +50,11 @@ It writes:
 
 The inspector does **not** yet clone URLs, select remote commits, execute target tests, or repair the target. Those are later capabilities and must not be inferred from the schema.
 
+Direct script inspection handles interpreter flags and their arguments, such as
+`python -W ignore app.py`, `node --require preload.js app.js`, and
+`bash -o errexit build.sh`. Shell expansion and indirect launcher commands remain
+outside this static inspection contract.
+
 ## Repository examiner (BYOK)
 
 A separate documentation examiner builds on the repository evidence substrate:
@@ -70,6 +75,11 @@ OPENAI_BASE_URL / ANTHROPIC_BASE_URL   # process environment only
 ```
 
 Multiple configured providers are attempted sequentially as fallback. Unsupported or not-faithfully-computable metrics remain `hmmm`; they are not guessed.
+
+Python coding cookies and UTF-8 byte-order marks are preserved during source
+mutation. If generated prose cannot be encoded in the source encoding, the file
+is left intact and the apply report records `hmmm`. Existing narratives remain
+available in assembled documentation even when a file has no safe mutation adapter.
 
 ## License
 

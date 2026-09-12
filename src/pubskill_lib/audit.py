@@ -35,6 +35,24 @@ NON_FILE_MODES = {
     "bash": {"-c"},
     "sh": {"-c"},
 }
+VALUE_OPTIONS = {
+    "python": {"-W", "-X", "--check-hash-based-pycs"},
+    "python3": {"-W", "-X", "--check-hash-based-pycs"},
+    "bash": {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"},
+    "sh": {"-o", "+o"},
+    "node": {
+        "-r", "--require", "--import", "--loader", "--experimental-loader",
+        "--conditions", "-C", "--input-type", "--env-file",
+        "--env-file-if-exists", "--inspect-port", "--inspect-publish-uid",
+        "--title", "--icu-data-dir", "--openssl-config", "--redirect-warnings",
+        "--trace-event-categories", "--trace-event-file-pattern",
+        "--unhandled-rejections", "--diagnostic-dir", "--report-directory",
+        "--report-filename", "--test-reporter", "--test-reporter-destination",
+        "--test-name-pattern", "--test-skip-pattern", "--test-concurrency",
+        "--test-shard", "--test-timeout", "--max-old-space-size",
+        "--stack-trace-limit",
+    },
+}
 
 
 class _Sink:
@@ -168,7 +186,12 @@ def _check_pyproject_scripts(target, sink):
 
 
 def _local_script_targets(command):
-    """Yield direct local script operands without confusing interpreter modes with flags."""
+    """Yield direct file operands after documented interpreter options.
+
+    This is a static audit of direct invocations, not a shell evaluator.
+    Python -W/-X, Bash -o/-O and startup files, and common Node value options
+    consume their arguments; attached values and -- delimiters are supported.
+    """
     for segment in re.split(r"\s*(?:&&|;|\|)\s*", command):
         if not segment.strip():
             continue
@@ -183,9 +206,32 @@ def _local_script_targets(command):
         index = 1
         while index < len(tokens):
             token = tokens[index]
-            if token in non_file_modes:
+            if token == "--":
+                if index + 1 < len(tokens) and tokens[index + 1] != "-":
+                    yield tokens[index + 1]
                 break
-            if token.startswith("-"):
+            if token == "-" or token.split("=", 1)[0] in non_file_modes:
+                break
+            if token in VALUE_OPTIONS[interpreter]:
+                index += 2
+                continue
+            if token.startswith("-") or (interpreter in {"bash", "sh"} and token.startswith("+")):
+                # Short options may be clustered or carry an attached argument.
+                non_file = False
+                if not token.startswith("--"):
+                    modes = {mode[1:] for mode in non_file_modes if len(mode) == 2}
+                    if interpreter in {"bash", "sh"}:
+                        modes.add("s")  # Read commands from stdin.
+                    for position, option in enumerate(token[1:], start=1):
+                        if token[0] == "-" and option in modes:
+                            non_file = True
+                            break
+                        if token[0] + option in VALUE_OPTIONS[interpreter]:
+                            if position == len(token) - 1:
+                                index += 1
+                            break
+                if non_file:
+                    break
                 index += 1
                 continue
             yield token

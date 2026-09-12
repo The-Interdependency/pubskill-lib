@@ -11,6 +11,7 @@ documentation assembly, and provider access remain separate layers.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -23,13 +24,6 @@ from . import msdmd_writer
 from . import narrative
 from . import providers
 from . import ratios
-
-
-def _read_text(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
 
 
 def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
@@ -54,17 +48,30 @@ def _apply(
 ) -> tuple[dict, dict]:
     narratives: dict[str, dict[str, str]] = {}
     changed: list[str] = []
+    unresolved: dict[str, str] = {}
     now = datetime.now(timezone.utc).isoformat()
     engine = ratios.RatiosEngine()
 
     for ev in evidence_list:
         path = boundary.assert_inside(root, root / ev.path)
-        original_text = _read_text(path)
+        if ev.narrative_entries:
+            narratives[ev.path] = ev.narrative_entries[0]
         adapter = engine.adapter_for(path)
-        if ev.marker is None or adapter is None:
+        if ev.marker is None or adapter is None or ev.encoding is None:
+            continue
+        try:
+            raw = path.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != ev.raw_sha256:
+                unresolved[ev.path] = "source changed after inventory; mutation skipped"
+                continue
+            original_text = raw.decode(ev.encoding)
+        except (OSError, UnicodeError) as exc:
+            unresolved[ev.path] = f"source unavailable; mutation skipped: {exc}"
             continue
 
         new_text = original_text
+        file_changes: list[str] = []
+        entry = narratives.get(ev.path)
         if narrate:
             result = narrative.narrate_file(
                 ev,
@@ -72,31 +79,32 @@ def _apply(
                 provider_list,
                 now,
             )
-            narratives[ev.path] = result.entry
+            entry = result.entry
             if result.hmmm:
                 result.entry["summary"] = result.entry["summary"] or "hmmm"
-        else:
-            existing = ev.narrative_entries[0] if ev.narrative_entries else None
-            if existing:
-                narratives[ev.path] = existing
-
-        entry = narratives.get(ev.path)
         if entry:
             new_text, block_changed = msdmd_writer.upsert_narrative(
                 new_text, ev.marker, entry, path
             )
             if block_changed:
-                changed.append(f"{ev.path}:narrative")
+                file_changes.append(f"{ev.path}:narrative")
 
         values = engine.compute(path, evidence.source_text(new_text, ev.marker))
         new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
         if ratio_changed:
-            changed.append(f"{ev.path}:ratios")
+            file_changes.append(f"{ev.path}:ratios")
 
         if new_text != original_text:
-            msdmd_writer.write_text_safely(path, new_text)
+            try:
+                msdmd_writer.write_text_safely(path, new_text, ev.encoding)
+            except UnicodeEncodeError:
+                unresolved[ev.path] = f"generated text cannot use {ev.encoding}; mutation skipped"
+                continue
+        if entry:
+            narratives[ev.path] = entry
+        changed.extend(file_changes)
 
-    return narratives, {"changed": changed, "narrated": len(narratives)}
+    return narratives, {"changed": changed, "narrated": len(narratives), "hmmm": unresolved}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -140,11 +148,13 @@ def main(argv: list[str] | None = None) -> int:
     volume = assemble.assemble_docs(root, evidence_list, narratives, out_dir)
 
     if args.json:
-        print(json.dumps({"changed": report["changed"], "volume": str(volume)}, indent=2))
+        print(json.dumps({"changed": report["changed"], "hmmm": report["hmmm"], "volume": str(volume)}, indent=2))
     else:
         print(f"applied: {len(report['changed'])} writes")
         for change in report["changed"]:
             print(f"  {change}")
+        for path, reason in report["hmmm"].items():
+            print(f"  hmmm: {path}: {reason}")
         print(f"assembled: {volume}")
     return 0
 

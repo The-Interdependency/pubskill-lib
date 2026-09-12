@@ -119,6 +119,61 @@ class NarrativeBoundaryTests(unittest.TestCase):
             self.assertEqual([], report["changed"])
 
 
+    def test_apply_preserves_encoding_and_source_identity(self):
+        class FakeProvider:
+            name, model = "fake", "model-1"
+            def chat(self, system, user):
+                assert "café" in user
+                return "Prints café."
+
+        for encoding in ("latin-1", "utf-8-sig"):
+            with self.subTest(encoding=encoding), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                path = root / "tool.py"
+                text = "# coding: " + ("utf-8" if encoding == "utf-8-sig" else encoding) + "\nprint('café')\n"
+                path.write_bytes(text.encode(encoding))
+                before = evidence.read_evidence(root, path)
+                examine._apply(root, [before], [FakeProvider()], True)
+                after = evidence.read_evidence(root, path)
+                self.assertEqual(before.sha256, after.sha256)
+                self.assertFalse(narrative.is_stale(after.narrative_entries[0], after.sha256))
+                self.assertIn("café", path.read_bytes().decode(encoding))
+                compile(path.read_bytes(), str(path), "exec")
+                first = path.read_bytes()
+                _, report = examine._apply(root, [after], [], False)
+                self.assertEqual(first, path.read_bytes())
+                self.assertEqual([], report["changed"])
+
+    def test_unrepresentable_narrative_does_not_truncate_source(self):
+        class FakeProvider:
+            name, model = "fake", "model-1"
+            def chat(self, system, user):
+                return "A snowman: \u2603"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "tool.py"
+            raw = b"# coding: latin-1\nprint('caf\xe9')\n"
+            path.write_bytes(raw)
+            narratives, report = examine._apply(root, [evidence.read_evidence(root, path)], [FakeProvider()], True)
+            self.assertEqual(raw, path.read_bytes())
+            self.assertEqual({}, narratives)
+            self.assertEqual([], report["changed"])
+            self.assertIn("tool.py", report["hmmm"])
+
+    def test_adapterless_narratives_are_retained_without_writes(self):
+        for filename, marker in (("tool.sh", "#"), ("index.php", "//")):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                path = root / filename
+                original = "\n".join((f"{marker} === NARRATIVE ===", f"{marker} id: existing", f"{marker} summary: Retained explanation.", f"{marker} === END NARRATIVE ===", ""))
+                path.write_text(original)
+                result, report = examine._apply(root, [evidence.read_evidence(root, path)], [], False)
+                self.assertEqual("Retained explanation.", result[filename]["summary"])
+                self.assertEqual(original, path.read_text())
+                self.assertEqual([], report["changed"])
+
+
 class CanonicalMarkerTests(unittest.TestCase):
     def test_evidence_uses_vendored_msdmd_registry(self):
         markers = evidence._comment_markers()
@@ -216,6 +271,25 @@ class PackageScriptTests(unittest.TestCase):
             document = audit.audit_path(root, "pin")
             claims = [f["claim"] for f in document["findings"] if f["surface"] == "deps"]
             self.assertTrue(any("escapes repository via /opt/project/build.js" in claim for claim in claims))
+
+    def test_value_taking_interpreter_options_select_actual_file(self):
+        commands = (
+            "python -W ignore app.py", "python3 -X dev app.py",
+            "python -uW ignore app.py", "python -Wignore app.py",
+            "python --check-hash-based-pycs always app.py",
+            "node --require preload.js app.py", "node -rpreload.js app.py",
+            "node --import preload.js --trace-warnings app.py",
+            "node --max-old-space-size 512 app.py",
+            "bash -o errexit app.py", "bash -O extglob app.py",
+            "bash --rcfile startup.sh app.py", "bash -eo pipefail app.py",
+            "sh +o errexit app.py", "python -- app.py",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(["app.py"], list(audit._local_script_targets(command)))
+        for command in ("python -W ignore -c pass", "python -mhttp.server", "node --eval=1", "bash -ec 'echo ok'", "sh -s arg", "python - arg", "node -r preload.js -e 1", "python -W"):
+            with self.subTest(command=command):
+                self.assertEqual([], list(audit._local_script_targets(command)))
 
     def test_non_object_package_manifest_is_target_defect(self):
         with tempfile.TemporaryDirectory() as tmp:

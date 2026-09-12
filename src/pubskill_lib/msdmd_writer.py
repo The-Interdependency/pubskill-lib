@@ -71,13 +71,14 @@ def upsert_narrative(
     return new_text, new_text != text
 
 
-def write_text_safely(path: Path, new_text: str) -> None:
-    """Write text without changing the file's executable bit."""
+def write_text_safely(path: Path, new_text: str, encoding: str = "utf-8") -> None:
+    """Preserve the source encoding and mode; encode before opening for writing."""
+    encoded = new_text.encode(encoding)
     mode = None
     try:
         mode = path.stat().st_mode & 0o777
     except OSError:
         pass
-    path.write_text(new_text, encoding="utf-8")
+    path.write_bytes(encoded)
     if mode is not None:
         path.chmod(mode)
