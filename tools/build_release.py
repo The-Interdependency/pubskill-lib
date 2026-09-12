@@ -109,7 +109,7 @@ def main() -> None:
                 raise ValueError(f"unexpected build artifact: {artifact.name}")
     hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(out.iterdir())}
     doctrine = json.loads((root / "src/pubskill_lib/_source.json").read_text())
-    manifest = {"schema": "pubskill-lib.release-manifest", "version": 1, "source_commit": commit, "source_tree": git("rev-parse", "HEAD^{tree}"), "source_date_epoch": epoch, "skill_lib_commit": doctrine["commit"], "build_toolchain": versions, "artifacts_sha256": hashes}
+    manifest = {"schema": "pubskill-lib.release-manifest", "version": 1, "source_commit": commit, "source_tree": git("rev-parse", "HEAD^{tree}"), "source_date_epoch": epoch, "skill_lib_commit": doctrine["commit"], "build_toolchain": versions, "build_python": sys.version, "artifacts_sha256": hashes}
     receipt = out / "release-manifest.json"
     receipt.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     hashes = dict(hashes)
