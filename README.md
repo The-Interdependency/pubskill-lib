@@ -133,4 +133,6 @@ publication; an unavailable operation leaves the source intact with `hmmm`.
 The generated volume uses a new source inventory after application, so preserved
 concurrent edits can mark their older narratives stale.
 Direct-script audit is intentionally bounded: unsupported commands, malformed
-quoting, and working-directory transitions remain visible as `hmmm`.
+quoting, shell expansions/control syntax, and working-directory transitions remain
+visible as `hmmm`. Later commands after an unresolved shell context inherit that
+uncertainty; the tool does not guess their working directory or entrypoint.

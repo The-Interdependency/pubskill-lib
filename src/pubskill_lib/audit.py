@@ -235,6 +235,30 @@ def _shell_segments(command, separators=";&|\n"):
         yield command[start:]
 
 
+def _shell_context_gap(segment):
+    """Refuse expansion/control syntax that this literal-path audit cannot resolve."""
+    quote, escaped = None, False
+    for character in segment:
+        if escaped:
+            if character == "\n":
+                return "shell line continuation is outside literal-path audit scope"
+            escaped = False
+            continue
+        if character == "\\" and quote != "'":
+            escaped = True
+        elif quote == "'":
+            if character == "'":
+                quote = None
+        elif character in "$`" or (quote is None and character in "*?[]{}()<>~"):
+            return "shell expansion or control syntax is outside literal-path audit scope"
+        elif quote:
+            if character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+    return None
+
+
 def _entrypoint_target(token, entry_url, unresolved=None):
     try:
         target = token
@@ -267,9 +291,16 @@ def _local_script_targets(command, unresolved=None):
     for segment in _shell_segments(command):
         if not segment.strip():
             continue
+        gap = _shell_context_gap(segment)
+        if gap:
+            cwd_unknown = True
+            if unresolved is not None:
+                unresolved.append(gap)
+            continue
         try:
             tokens = shlex.split(segment)
         except ValueError as error:
+            cwd_unknown = True
             if unresolved is not None:
                 unresolved.append(f"unparseable package script: {error}")
             continue
@@ -286,6 +317,7 @@ def _local_script_targets(command, unresolved=None):
                 unresolved.append("working-directory change is outside direct-script audit scope")
             continue
         if interpreter not in LOCAL_SCRIPT_INTERPRETERS:
+            cwd_unknown = True
             if unresolved is not None:
                 unresolved.append(f"command is outside direct interpreter audit scope: {tokens[0]!r}")
             continue
