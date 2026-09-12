@@ -5,7 +5,7 @@
 #   summary: builds normalized immutable wheel and sdist artifacts from a clean exact Git commit
 #   owner: The Interdependency
 #   public_surface: python tools/build_release.py --out DIRECTORY
-#   internal_surface: normalize_sdist, main
+#   internal_surface: normalize_sdist, normalize_wheel, main
 #   auth_boundary: none
 #   storage_boundary: write
 #   storage_notes: temporary build directory and explicit output directory
@@ -28,8 +28,8 @@
 
 Run twice into separate empty directories and compare wheel/sdist SHA-256 values.
 The builder performs no publication. Clean-install and consumer gates are required
-before publishing these bytes. Tar headers are normalized to the commit timestamp;
-wheel timestamps use SOURCE_DATE_EPOCH. Source file contents are unchanged.
+before publishing these bytes. Archive headers, order, and permissions are
+normalized to the commit timestamp. Wheel payloads and RECORD are unchanged.
 """
 from __future__ import annotations
 
@@ -45,6 +45,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import zipfile
 
 
 def normalize_sdist(path: Path, destination: Path, epoch: int) -> None:
@@ -64,6 +66,16 @@ def normalize_sdist(path: Path, destination: Path, epoch: int) -> None:
                             target.addfile(member, stream)
                     else:
                         target.addfile(member)
+
+
+def normalize_wheel(path: Path, destination: Path, epoch: int) -> None:
+    with zipfile.ZipFile(path) as source, zipfile.ZipFile(destination, "w") as target:
+        for member in sorted(source.infolist(), key=lambda item: item.filename):
+            normalized = zipfile.ZipInfo(member.filename, time.gmtime(epoch)[:6])
+            normalized.create_system = 3
+            mode = 0o40755 if member.is_dir() else 0o100755 if (member.external_attr >> 16) & 0o111 else 0o100644
+            normalized.external_attr = (mode << 16) | (0x10 if member.is_dir() else 0)
+            target.writestr(normalized, source.read(member), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 
 def main() -> None:
@@ -104,7 +116,7 @@ def main() -> None:
             if artifact.name.endswith(".tar.gz"):
                 normalize_sdist(artifact, out / artifact.name, epoch)
             elif artifact.suffix == ".whl":
-                (out / artifact.name).write_bytes(artifact.read_bytes())
+                normalize_wheel(artifact, out / artifact.name, epoch)
             else:
                 raise ValueError(f"unexpected build artifact: {artifact.name}")
     hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(out.iterdir())}

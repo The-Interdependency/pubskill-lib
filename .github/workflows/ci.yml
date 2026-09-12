@@ -31,8 +31,14 @@ jobs:
         run: |
           python -m venv /tmp/pubskill-build-venv
           /tmp/pubskill-build-venv/bin/python -m pip install -r requirements-build.txt
-          /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-a
-          /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-b
+          (
+            umask 022
+            /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-a
+          )
+          (
+            umask 077
+            /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-b
+          )
           diff /tmp/pubskill-release-a/SHA256SUMS /tmp/pubskill-release-b/SHA256SUMS
           /tmp/pubskill-wheel-venv/bin/python -m pip install --no-deps --force-reinstall /tmp/pubskill-release-a/*.whl
           mkdir /tmp/pubskill-replay

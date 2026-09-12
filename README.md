@@ -44,8 +44,11 @@ python tools/build_release.py --out /tmp/pubskill-build-b
 diff /tmp/pubskill-build-a/SHA256SUMS /tmp/pubskill-build-b/SHA256SUMS
 ```
 
-The builder uses only committed source, normalizes source archive headers, and
+The builder uses only committed source, normalizes source and wheel archive
+headers, ordering, and permissions, and
 records source, doctrine, toolchain, and artifact digests in `release-manifest.json`.
+CI compares builds under both 022 and 077 file-creation masks; wheel payloads
+and their RECORD hashes remain unchanged by archive normalization.
 It does not publish. Before publication, install the exact wheel in a fresh venv,
 run the tests and fixture from the extracted sdist, and inspect a real consumer.
 The wheel retains its canonical skill-lib source pin without requiring a checkout.
