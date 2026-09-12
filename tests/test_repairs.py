@@ -47,6 +47,67 @@ class CredentialBoundaryTests(unittest.TestCase):
 
 
 class NarrativeBoundaryTests(unittest.TestCase):
+    def test_fence_shaped_literal_data_remains_source(self):
+        class FakeProvider:
+            name, model = "fake", "model-1"
+            def chat(self, system, user):
+                return "Stores a literal string."
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "literal.py"
+            original = 'payload = """\n# === NARRATIVE ===\n# id: literal_data\n# summary: alpha\n# === END NARRATIVE ===\n# ratios: loc_comments=1:2 imports_exports=3:4 calls_definitions=5:6\n"""\n'
+            path.write_text(original)
+            before = evidence.read_evidence(root, path)
+            self.assertEqual([], before.narrative_entries)
+            path.write_text(original.replace("alpha", "beta"))
+            self.assertNotEqual(before.sha256, evidence.read_evidence(root, path).sha256)
+            path.write_text(original)
+            examine._apply(root, [before], [FakeProvider()], True)
+            namespace = {}
+            exec(compile(path.read_bytes(), str(path), "exec"), namespace)
+            expected = {}
+            exec(compile(original, str(path), "exec"), expected)
+            self.assertEqual(expected["payload"], namespace["payload"])
+            after = evidence.read_evidence(root, path)
+            self.assertEqual(before.sha256, after.sha256)
+            self.assertEqual(1, len(after.narrative_entries))
+            first = path.read_bytes()
+            examine._apply(root, [after], [], False)
+            self.assertEqual(first, path.read_bytes())
+
+    def test_provider_cannot_overwrite_a_concurrent_source_edit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "concurrent.py"
+            path.write_text("print('old')\n")
+            concurrent = b"print('concurrent edit')\n"
+            class EditingProvider:
+                name, model = "fake", "model-1"
+                def chat(self, system, user):
+                    path.write_bytes(concurrent)
+                    return "Prints old."
+            _, report = examine._apply(root, [evidence.read_evidence(root, path)], [EditingProvider()], True)
+            self.assertEqual(concurrent, path.read_bytes())
+            self.assertEqual([], report["changed"])
+            self.assertIn("concurrent.py", report["hmmm"])
+
+    def test_failed_publication_preserves_source_and_external_hardlinks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "source.py"
+            original = b"original\n"
+            path.write_bytes(original)
+            alias = Path(tmp) / "external.py"
+            alias.hardlink_to(path)
+            with patch("pubskill_lib.msdmd_writer.os.replace", side_effect=OSError("publication failed")):
+                with self.assertRaises(OSError):
+                    msdmd_writer.write_text_safely(path, "new\n", expected_raw=original)
+            self.assertEqual(original, path.read_bytes())
+            self.assertEqual([], list(Path(tmp).glob(".examiner-*")))
+            msdmd_writer.write_text_safely(path, "new\n", expected_raw=original)
+            self.assertEqual(original, alias.read_bytes())
+            self.assertEqual(b"new\n", path.read_bytes())
+
     def test_apply_preserves_packaged_canonical_parser(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -335,6 +396,23 @@ class PackageScriptTests(unittest.TestCase):
     def test_inspector_endpoint_requires_equals_in_node_24(self):
         # Official Node v24.15.0 attempts to load 9229 as the entry file here.
         self.assertEqual(["9229"], list(audit._local_script_targets("node --inspect 9229 app.js")))
+
+    def test_node_inspect_subcommand_and_malformed_urls(self):
+        self.assertEqual(["missing.js"], list(audit._local_script_targets("node inspect missing.js")))
+        self.assertEqual(["missing.js"], list(audit._local_script_targets("node inspect --port=9000 missing.js")))
+        self.assertEqual([], list(audit._local_script_targets("node inspect localhost:9229")))
+        self.assertEqual([], list(audit._local_script_targets("node inspect -p 1234")))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "inspect").mkdir()
+            (root / "package.json").write_text(json.dumps({"scripts": {
+                "inspect": "node inspect missing.js",
+                "nul": "node --entry-url file:///tmp/%00.js",
+                "raw-nul": "node bad\u0000name.js",
+            }}))
+            document = audit.audit_path(root, "pin")
+            self.assertTrue(any("missing local file missing.js" in f["claim"] for f in document["findings"]))
+            self.assertEqual(2, sum("NUL-containing" in item for item in document["hmmm"]))
 
     def test_quoted_segments_and_entrypoint_urls(self):
         self.assertEqual(["first.js", "second.js"], list(audit._local_script_targets("node --test-name-pattern 'a|b' first.js && node second.js")))

@@ -218,21 +218,26 @@ def _shell_segments(command):
     yield command[start:]
 
 
-def _entrypoint_target(token, entry_url):
-    if not entry_url:
-        return token
+def _entrypoint_target(token, entry_url, unresolved=None):
     try:
-        parsed = urlsplit(token)
-        if parsed.scheme == "file" and parsed.netloc in {"", "localhost"}:
-            return unquote(parsed.path, errors="strict")
-        if not parsed.scheme:
-            return unquote(parsed.path, errors="strict")  # Relative entry URL.
-    except (ValueError, UnicodeError):
-        pass
+        target = token
+        if entry_url:
+            parsed = urlsplit(token)
+            if parsed.scheme == "file" and parsed.netloc not in {"", "localhost"}:
+                raise ValueError("unsupported file URL authority")
+            if parsed.scheme not in {"", "file"}:
+                return None
+            target = unquote(parsed.path, errors="strict")
+        if not target or "\0" in target:
+            raise ValueError("empty or NUL-containing path")
+        return target
+    except (ValueError, UnicodeError) as error:
+        if unresolved is not None:
+            unresolved.append(f"unresolved entrypoint {token!r}: {error}")
     return None
 
 
-def _local_script_targets(command):
+def _local_script_targets(command, unresolved=None):
     """Yield direct file operands after documented interpreter options.
 
     This is a static audit of direct invocations, not a shell evaluator.
@@ -254,13 +259,26 @@ def _local_script_targets(command):
         index = 1
         while index < len(tokens):
             token = tokens[index]
+            if interpreter == "node" and token == "inspect":
+                arguments = tokens[index + 1:]
+                if not arguments:
+                    break
+                target = arguments[0]
+                if re.fullmatch(r"[^:]+:\d+", target) or (len(arguments) == 2 and target == "-p" and arguments[1].isdigit()):
+                    break  # Attach to an existing debugger/process, not a file.
+                if re.fullmatch(r"--port=\d+", target):
+                    target = arguments[1] if len(arguments) > 1 else ""
+                target = _entrypoint_target(target, False, unresolved)
+                if target is not None:
+                    yield target
+                break
             if interpreter == "node" and token in {"--entry-url", "--experimental-entry-url"}:
                 entry_url = True
                 index += 1
                 continue
             if token == "--":
                 if index + 1 < len(tokens) and tokens[index + 1] != "-":
-                    target = _entrypoint_target(tokens[index + 1], entry_url)
+                    target = _entrypoint_target(tokens[index + 1], entry_url, unresolved)
                     if target is not None:
                         yield target
                 break
@@ -288,13 +306,13 @@ def _local_script_targets(command):
                     break
                 index += 1
                 continue
-            target = _entrypoint_target(token, entry_url)
+            target = _entrypoint_target(token, entry_url, unresolved)
             if target is not None:
                 yield target
             break
 
 
-def _check_package_scripts(target, sink):
+def _check_package_scripts(target, sink, unresolved):
     package = target / "package.json"
     text = _read_text(package)
     if text is None:
@@ -313,12 +331,17 @@ def _check_package_scripts(target, sink):
     for name, command in sorted(scripts.items()):
         if not isinstance(command, str):
             continue
-        for raw_path in _local_script_targets(command):
+        script_unresolved = []
+        for raw_path in _local_script_targets(command, script_unresolved):
             raw_path = raw_path.strip('"\'')
             if "://" in raw_path:
                 continue
-            candidate = Path(raw_path)
-            local = candidate.resolve() if candidate.is_absolute() else (target / candidate).resolve()
+            try:
+                candidate = Path(raw_path)
+                local = candidate.resolve() if candidate.is_absolute() else (target / candidate).resolve()
+            except (ValueError, OSError) as error:
+                script_unresolved.append(f"unresolved local path {raw_path!r}: {error}")
+                continue
             try:
                 local.relative_to(target.resolve())
             except ValueError:
@@ -330,6 +353,7 @@ def _check_package_scripts(target, sink):
                     f"package script {name} points to missing local file {raw_path}",
                     "package.json [scripts]",
                 )
+        unresolved.extend(f"package script {name}: {item}" for item in script_unresolved)
 
 
 def _read_source_pin():
@@ -367,7 +391,7 @@ def audit_path(target_path, source_pin=None):
         if has_pyproject:
             _check_pyproject_scripts(target, sink)
         if has_package:
-            _check_package_scripts(target, sink)
+            _check_package_scripts(target, sink, document["hmmm"])
 
     document["surfaces"] = surfaces
     document["findings"] = sink.finalize()
