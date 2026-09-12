@@ -161,6 +161,21 @@ class NarrativeBoundaryTests(unittest.TestCase):
             self.assertEqual([], report["changed"])
             self.assertIn("tool.py", report["hmmm"])
 
+    def test_non_python_bom_stays_at_byte_zero(self):
+        for name, body in (("main.c", "int main(void) { return 0; }\n"), ("main.rs", "fn main() {}\n")):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                path = root / name
+                path.write_bytes(body.encode("utf-8-sig"))
+                before = evidence.read_evidence(root, path)
+                examine._apply(root, [before], [], False)
+                raw = path.read_bytes()
+                self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))
+                self.assertEqual(1, raw.count(b"\xef\xbb\xbf"))
+                self.assertEqual(before.sha256, evidence.read_evidence(root, path).sha256)
+                examine._apply(root, [evidence.read_evidence(root, path)], [], False)
+                self.assertEqual(raw, path.read_bytes())
+
     def test_adapterless_narratives_are_retained_without_writes(self):
         for filename, marker in (("tool.sh", "#"), ("index.php", "//")):
             with self.subTest(filename=filename), tempfile.TemporaryDirectory() as tmp:
@@ -280,6 +295,7 @@ class PackageScriptTests(unittest.TestCase):
             "node --require preload.js app.py", "node -rpreload.js app.py",
             "node --import preload.js --trace-warnings app.py",
             "node --max-old-space-size 512 app.py",
+            "node --watch --watch-path src app.py",
             "bash -o errexit app.py", "bash -O extglob app.py",
             "bash --rcfile startup.sh app.py", "bash -eo pipefail app.py",
             "sh +o errexit app.py", "python -- app.py",
