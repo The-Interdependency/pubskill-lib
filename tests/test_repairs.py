@@ -135,6 +135,68 @@ class NarrativeBoundaryTests(unittest.TestCase):
             self.assertEqual(b"late edit", alias.read_bytes())
             self.assertEqual(b"new\n", path.read_bytes())
 
+    def test_unrelated_similarly_named_source_is_not_canonical_authority(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("other/pubskill_lib/_msdmd_universal.py", "src/pubskill_lib/_msdmd_universal.py"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("print('ordinary user code')\n")
+                item = evidence.read_evidence(root, path)
+                self.assertEqual(1, examine._plan(root, [item])["supported_files"])
+                _, report = examine._apply(root, [item], [], False)
+                self.assertTrue(report["changed"])
+                self.assertEqual([], report["preserved_authority"])
+
+    def test_candidate_setup_failure_cleans_recovery_storage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "source.py"
+            path.write_text("original\n")
+            for operation in ("write_bytes", "chmod"):
+                with patch.object(Path, operation, side_effect=OSError("quota")):
+                    with self.assertRaises(OSError):
+                        msdmd_writer.write_text_safely(path, "new\n")
+                self.assertEqual("original\n", path.read_text())
+                self.assertEqual([], list(Path(tmp).glob(".examiner-originals-*")))
+
+    def test_publication_preserves_inode_metadata_or_refuses_to_move(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "source.py"
+            path.write_text("original\n")
+            path.chmod(0o751)
+            os.setxattr(path, "user.pubskill_test", b"retained")
+            original_metadata = msdmd_writer._inode_metadata(path)
+            msdmd_writer.write_text_safely(path, "new\n")
+            self.assertEqual(original_metadata, msdmd_writer._inode_metadata(path))
+            with patch("pubskill_lib.msdmd_writer.os.setxattr", side_effect=OSError("metadata denied")):
+                with self.assertRaises(OSError):
+                    msdmd_writer.write_text_safely(path, "third\n")
+            self.assertEqual("new\n", path.read_text())
+            self.assertEqual(original_metadata, msdmd_writer._inode_metadata(path))
+
+    def test_assembled_narrative_is_stale_after_preserving_concurrent_edit(self):
+        import contextlib, io
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "source.py"
+            original = "print('old')\n"
+            path.write_text(original)
+            ev = evidence.read_evidence(root, path)
+            decorated, _ = msdmd_writer.upsert_narrative(original, "#", {"id": "old_narrative", "summary": "Old summary", "evidence_sha256": ev.sha256}, path)
+            path.write_text(decorated)
+            class EditingProvider:
+                name, model = "fake", "model"
+                def chat(self, system, user):
+                    path.write_text(path.read_text().replace("print('old')", "print('edited')"))
+                    return "Generated stale summary"
+            with patch("pubskill_lib.providers.configured_providers", return_value=[EditingProvider()]), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(0, examine.main(["--repo", str(root), "--apply", "--narrate"]))
+            output = (root / "docs/examiner/EXAMINER.md").read_text()
+            self.assertIn("Old summary", output)
+            self.assertIn("> stale:", output)
+            self.assertIn("print('edited')", path.read_text())
+
     def test_apply_preserves_packaged_canonical_parser(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -485,6 +547,18 @@ class PackageScriptTests(unittest.TestCase):
             self.assertEqual(2, len(claims))
             self.assertTrue(any("escapes repository via /definitely/missing.js" in claim for claim in claims))
             self.assertTrue(any("missing local file missing.js" in claim for claim in claims))
+
+    def test_exit_comments_paths_and_unresolved_shell_context(self):
+        for command in ("python --help missing.py", "python -uV missing.py", "node --version missing.js", "bash --help missing.sh"):
+            self.assertEqual([], list(audit._local_script_targets(command)), command)
+        self.assertEqual(["real.js"], list(audit._local_script_targets("node real.js # disabled && node missing.js")))
+        self.assertEqual(["real.js", "next.js"], list(audit._local_script_targets("node real.js # disabled && node missing.js\nnode next.js")))
+        self.assertEqual(["missing.js"], list(audit._local_script_targets("/usr/bin/node missing.js")))
+        self.assertEqual(["missing.py"], list(audit._local_script_targets("./venv/bin/python missing.py")))
+        for command in ("node 'missing.js", "cd frontend && node build.js", "node --unknown-option value missing.js", "unknown-runner missing.js"):
+            unresolved = []
+            self.assertEqual([], list(audit._local_script_targets(command, unresolved)), command)
+            self.assertTrue(unresolved, command)
 
     def test_non_object_package_manifest_is_target_defect(self):
         with tempfile.TemporaryDirectory() as tmp:

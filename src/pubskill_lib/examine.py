@@ -26,8 +26,14 @@ from . import providers
 from . import ratios
 
 
-def _canonical_artifact(path: Path) -> bool:
-    return path.name == "_msdmd_universal.py" and path.parent.name == "pubskill_lib"
+def _canonical_artifact(root: Path, path: Path) -> bool:
+    candidate = path if path.is_absolute() else root / path
+    try:
+        return (candidate.relative_to(root).as_posix() == "src/pubskill_lib/_msdmd_universal.py"
+                and not candidate.is_symlink()
+                and candidate.read_bytes() == Path(evidence._canonical_msdmd.__file__).read_bytes())
+    except (OSError, ValueError):
+        return False
 
 
 def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
@@ -35,7 +41,7 @@ def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
     supported = []
     unsupported = []
     for ev in evidence_list:
-        if _canonical_artifact(Path(ev.path)):
+        if _canonical_artifact(root, Path(ev.path)):
             continue
         reason = "; ".join(ev.hmmm)
         if ev.marker is None or ev.encoding is None or engine.adapter_for(Path(ev.path)) is None:
@@ -54,7 +60,7 @@ def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
         "root": str(root),
         "files": len(evidence_list),
         "supported_files": len(supported),
-        "preserved_authority": [ev.path for ev in evidence_list if _canonical_artifact(Path(ev.path))],
+        "preserved_authority": [ev.path for ev in evidence_list if _canonical_artifact(root, Path(ev.path))],
         "unsupported": unsupported,
         "ratios_missing": [ev.path for ev in supported if not ev.ratios_lines],
         "narrative_present": [ev.path for ev in supported if ev.narrative_entries],
@@ -79,7 +85,7 @@ def _apply(
         path = boundary.assert_inside(root, root / ev.path)
         if ev.narrative_entries:
             narratives[ev.path] = ev.narrative_entries[0]
-        if _canonical_artifact(path):
+        if _canonical_artifact(root, path):
             preserved_authority.append(ev.path)
             continue
         adapter = engine.adapter_for(path)
@@ -190,6 +196,11 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     narratives, report = _apply(root, evidence_list, provider_list, args.narrate)
+    # Rendering observes live source after every write/skip, so an old summary
+    # cannot retain a current marker after a concurrent edit was preserved.
+    evidence_list = evidence.inventory(root)
+    narratives = {ev.path: ev.narrative_entries[0] for ev in evidence_list if ev.narrative_entries}
+    report["narrated"] = len(narratives)
     out_dir = boundary.assert_inside(root, root / args.out)
     volume = assemble.assemble_docs(root, evidence_list, narratives, out_dir)
 

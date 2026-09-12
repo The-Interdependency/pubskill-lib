@@ -102,3 +102,11 @@ writers can still change the retained original after the operation; stop editors
 and generators before applying, then inspect recovery files before removing them.
 This protocol preserves bytes; it does not claim a transactional edit shared with
 uncooperative writers or uninterrupted availability to concurrent readers.
+
+Source publication currently requires Linux inode metadata support. Ownership,
+permission bits, ACL/xattr/security-label bytes are copied and compared before
+publication; an unavailable operation leaves the source intact with `hmmm`.
+The generated volume uses a new source inventory after application, so preserved
+concurrent edits can mark their older narratives stale.
+Direct-script audit is intentionally bounded: unsupported commands, malformed
+quoting, and working-directory transitions remain visible as `hmmm`.
