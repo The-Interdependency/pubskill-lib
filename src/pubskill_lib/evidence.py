@@ -122,7 +122,15 @@ def read_evidence(root: Path, path: Path) -> FileEvidence:
         item.hmmm.append("metadata-excluding source hash unavailable; mutation disabled")
         return item
 
-    stable_encoded = source_text(text, marker, path).encode("utf-8")
+    try:
+        stable_encoded = source_text(text, marker, path).encode("utf-8")
+    except UnicodeError as error:
+        item.sha256 = item.raw_sha256
+        item.marker = None
+        item.encoding = None
+        item.hmmm.append(f"source encoding unresolved while hashing: {error}")
+        item.hmmm.append("metadata-excluding source hash unavailable; mutation disabled")
+        return item
     item.sha256 = hashlib.sha256(stable_encoded).hexdigest()
 
     first_line = text.splitlines()[0].rstrip() if text.splitlines() else ""
