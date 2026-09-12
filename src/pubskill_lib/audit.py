@@ -235,10 +235,10 @@ def _shell_segments(command, separators=";&|\n"):
         yield command[start:]
 
 
-def _shell_context_gap(segment):
-    """Refuse expansion/control syntax that this literal-path audit cannot resolve."""
+def _shell_context_gap(segment, *, context_only=False):
+    """Identify unsupported syntax, separating word expansion from shell structure."""
     quote, escaped = None, False
-    for character in segment:
+    for index, character in enumerate(segment):
         if escaped:
             if character == "\n":
                 return "shell line continuation is outside literal-path audit scope"
@@ -249,8 +249,11 @@ def _shell_context_gap(segment):
         elif quote == "'":
             if character == "'":
                 quote = None
-        elif character in "$`" or (quote is None and character in "*?[]{}()<>~"):
-            return "shell expansion or control syntax is outside literal-path audit scope"
+        elif quote is None and (character in "`{}()<>" or segment[index:index + 2] == "$("):
+            return "shell control syntax is outside literal-path audit scope"
+        elif not context_only and (character in "$`" or (quote is None and
+                (character in "*?[]" or (character == "~" and (index == 0 or segment[index - 1].isspace()))))):
+            return "shell word expansion is outside literal-path audit scope"
         elif quote:
             if character == quote:
                 quote = None
@@ -292,11 +295,10 @@ def _local_script_targets(command, unresolved=None):
         if not segment.strip():
             continue
         gap = _shell_context_gap(segment)
-        if gap:
-            cwd_unknown = True
-            if unresolved is not None:
-                unresolved.append(gap)
-            continue
+        if gap and unresolved is not None:
+            unresolved.append(gap)
+        prior_cwd_unknown = cwd_unknown
+        cwd_unknown = cwd_unknown or bool(_shell_context_gap(segment, context_only=True))
         try:
             tokens = shlex.split(segment)
         except ValueError as error:
@@ -310,6 +312,9 @@ def _local_script_targets(command, unresolved=None):
             raw_words.pop(0)
         if not tokens:
             continue
+        if _shell_context_gap(raw_words[0]):
+            cwd_unknown = True  # A dynamic command could resolve to a shell builtin.
+            continue
         interpreter = Path(tokens[0]).name
         if interpreter in {"cd", "pushd", "popd"}:
             cwd_unknown = True
@@ -321,7 +326,7 @@ def _local_script_targets(command, unresolved=None):
             if unresolved is not None:
                 unresolved.append(f"command is outside direct interpreter audit scope: {tokens[0]!r}")
             continue
-        if cwd_unknown:
+        if prior_cwd_unknown:
             if unresolved is not None:
                 unresolved.append(f"script target after working-directory change is unresolved: {segment.strip()!r}")
             continue
@@ -330,6 +335,8 @@ def _local_script_targets(command, unresolved=None):
         inspecting = False
         index = 1
         while index < len(tokens):
+            if _shell_context_gap(" ".join(raw_words[:index + 1])):
+                break
             token = tokens[index]
             if interpreter == "node" and token == "inspect" and not inspecting:
                 inspecting = True
@@ -342,7 +349,8 @@ def _local_script_targets(command, unresolved=None):
                 index += 1
                 continue
             if token == "--":
-                if index + 1 < len(tokens) and tokens[index + 1] != "-":
+                if (index + 1 < len(tokens) and tokens[index + 1] != "-"
+                        and not _shell_context_gap(" ".join(raw_words[:index + 2]))):
                     target = _entrypoint_target(tokens[index + 1], entry_url, unresolved)
                     if target is not None:
                         yield target

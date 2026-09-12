@@ -548,6 +548,26 @@ class PackageScriptTests(unittest.TestCase):
             self.assertTrue(any("escapes repository via /definitely/missing.js" in claim for claim in claims))
             self.assertTrue(any("missing local file missing.js" in claim for claim in claims))
 
+    def test_word_expansions_preserve_independent_literal_entrypoints(self):
+        for command, expected in (
+            ('node missing.js "$ARG"', ["missing.js"]),
+            ('python missing.py "$ARG"', ["missing.py"]),
+            ('node -- missing.js "$ARG"', ["missing.js"]),
+            ('node build~backup.js', ["build~backup.js"]),
+            ('node $SCRIPT && node missing.js', ["missing.js"]),
+            ('node *.js && node missing.js', ["missing.js"]),
+            ('node "$SCRIPT" && node missing.js', ["missing.js"]),
+            ('node missing.js "$(pwd)"', ["missing.js"]),
+            ('node ~/script.js', []),
+            ('node -- $SCRIPT', []),
+            ('node $(cd ..; node hidden.js; pwd) && node uncertain.js', []),
+        ):
+            with self.subTest(command=command):
+                gaps = []
+                self.assertEqual(list(audit._local_script_targets(command, gaps)), expected)
+                if "$" in command or "*" in command or "~/" in command:
+                    self.assertTrue(gaps)
+
     def test_exit_comments_paths_and_unresolved_shell_context(self):
         for command in ("python --help missing.py", "python -uV missing.py", "node --version missing.js", "bash --help missing.sh"):
             self.assertEqual([], list(audit._local_script_targets(command)), command)
