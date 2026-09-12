@@ -47,6 +47,15 @@ import tarfile
 import tempfile
 import time
 import zipfile
+import zlib
+
+
+def check_compressor() -> dict[str, str]:
+    expected = "1.3.1"
+    actual = {"implementation": "zlib", "compile_version": zlib.ZLIB_VERSION, "runtime_version": zlib.ZLIB_RUNTIME_VERSION}
+    if actual["compile_version"] != expected or actual["runtime_version"] != expected:
+        raise RuntimeError(f"release builds require zlib {expected} at compile time and runtime: {actual}")
+    return actual
 
 
 def normalize_sdist(path: Path, destination: Path, epoch: int) -> None:
@@ -87,6 +96,7 @@ def main() -> None:
         return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
     if git("status", "--porcelain"):
         raise SystemExit("release build requires a clean Git checkout")
+    compressor = check_compressor()
     commit = git("rev-parse", "HEAD")
     epoch = int(git("show", "-s", "--format=%ct", commit))
     out = args.out.resolve()
@@ -123,7 +133,7 @@ def main() -> None:
                 raise ValueError(f"unexpected build artifact: {artifact.name}")
     hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(out.iterdir())}
     doctrine = json.loads(git("show", f"{commit}:src/pubskill_lib/_source.json"))
-    manifest = {"schema": "pubskill-lib.release-manifest", "version": 1, "source_commit": commit, "source_tree": git("rev-parse", f"{commit}^{{tree}}"), "source_date_epoch": epoch, "skill_lib_commit": doctrine["commit"], "build_toolchain": versions, "build_python": sys.version, "artifacts_sha256": hashes}
+    manifest = {"schema": "pubskill-lib.release-manifest", "version": 1, "source_commit": commit, "source_tree": git("rev-parse", f"{commit}^{{tree}}"), "source_date_epoch": epoch, "skill_lib_commit": doctrine["commit"], "build_toolchain": versions, "build_python": sys.version, "compressor": compressor, "artifacts_sha256": hashes}
     receipt = out / "release-manifest.json"
     receipt.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     hashes = dict(hashes)

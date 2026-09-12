@@ -38,6 +38,9 @@ From the release's exact Git commit, install the pinned build tools and build
 into two empty directories:
 
 ```bash
+python -m pip install uv==0.11.18
+uv venv --managed-python --python 3.11.15 /tmp/pubskill-build-env
+. /tmp/pubskill-build-env/bin/activate
 python -m pip install -r requirements-build.txt
 python tools/build_release.py --out /tmp/pubskill-build-a
 python tools/build_release.py --out /tmp/pubskill-build-b
@@ -46,7 +49,8 @@ diff /tmp/pubskill-build-a/SHA256SUMS /tmp/pubskill-build-b/SHA256SUMS
 
 The builder uses only committed source, normalizes source and wheel archive
 headers, ordering, and permissions, and
-records source, doctrine, toolchain, and artifact digests in `release-manifest.json`.
+requires zlib 1.3.1 at compile time and runtime, and records its identity along
+with source, doctrine, toolchain, and artifact digests in `release-manifest.json`.
 CI compares builds under both 022 and 077 file-creation masks; wheel payloads
 and their RECORD hashes remain unchanged by archive normalization.
 It does not publish. Before publication, install the exact wheel in a fresh venv,
