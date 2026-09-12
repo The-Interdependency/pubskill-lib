@@ -153,6 +153,10 @@ def opening_index(lines: list[str], adapter: LanguageRatioAdapter | None) -> int
     return source_boundaries.opening_index(lines, adapter)
 
 
+class UnsupportedPlacementError(ValueError):
+    """Protected source lines conflict with the pinned canonical seal boundary."""
+
+
 def place_ratios(
     text: str,
     marker: str,
@@ -176,6 +180,9 @@ def place_ratios(
     new_text = "\n".join(lines)
     if lines:
         new_text += "\n"
+    from . import _msdmd_universal
+    if _msdmd_universal.ratios_placement(new_text, marker) != (True, True):
+        raise UnsupportedPlacementError("protected source prologue conflicts with pinned canonical RATIOS placement; mutation skipped")
     return new_text, new_text != text
 
 

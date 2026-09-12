@@ -76,9 +76,11 @@ OPENAI_BASE_URL / ANTHROPIC_BASE_URL   # process environment only
 
 Multiple configured providers are attempted sequentially as fallback. Unsupported or not-faithfully-computable metrics remain `hmmm`; they are not guessed.
 
-Python coding cookies and UTF-8 byte-order marks are preserved during source
-mutation. If generated prose cannot be encoded in the source encoding, the file
-is left intact and the apply report records `hmmm`. Existing narratives remain
+UTF-8 byte-order marks are preserved during source mutation. Files whose protected
+coding cookies conflict with the pinned canonical RATIOS placement are left intact
+and reported as `hmmm`; this consumer cannot expand canonical placement rules.
+If generated prose cannot be encoded in the source encoding, the file is also
+left intact with `hmmm`. Existing narratives remain
 available in assembled documentation even when a file has no safe mutation adapter.
 
 ## License
@@ -92,7 +94,8 @@ Do not add skills here first. Add them in skill-lib, mark them appropriately, pi
 Source updates preserve the original inode in a private `.examiner-originals-*`
 directory beside the file, recorded under `preserved_sources` in the apply report.
 These recovery directories are excluded from examiner inventory and should not be
-committed. Publication briefly withdraws the old name, then creates the updated
+committed. The required hard-link operations are probed before source is moved.
+Publication briefly withdraws the old name, then creates the updated
 name only if it remains absent; it never replaces a competing live file. A
 collision or observed write to the retained original records `hmmm`. Already-open
 writers can still change the retained original after the operation; stop editors
