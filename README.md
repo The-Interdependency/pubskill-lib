@@ -88,3 +88,14 @@ MPL-2.0, same as skill-lib. Changes to MPL-covered files must be published.
 ## Canon
 
 Do not add skills here first. Add them in skill-lib, mark them appropriately, pin the SHA in `SOURCE.md`, then propagate the public slice.
+
+Source updates preserve the original inode in a private `.examiner-originals-*`
+directory beside the file, recorded under `preserved_sources` in the apply report.
+These recovery directories are excluded from examiner inventory and should not be
+committed. Publication briefly withdraws the old name, then creates the updated
+name only if it remains absent; it never replaces a competing live file. A
+collision or observed write to the retained original records `hmmm`. Already-open
+writers can still change the retained original after the operation; stop editors
+and generators before applying, then inspect recovery files before removing them.
+This protocol preserves bytes; it does not claim a transactional edit shared with
+uncooperative writers or uninterrupted availability to concurrent readers.

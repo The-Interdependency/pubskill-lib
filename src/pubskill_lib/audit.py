@@ -198,7 +198,7 @@ def _check_pyproject_scripts(target, sink):
             )
 
 
-def _shell_segments(command):
+def _shell_segments(command, separators=";&|\n"):
     """Split direct shell commands while retaining quoted/escaped separators."""
     start, quote, escaped = 0, None, False
     for index, character in enumerate(command):
@@ -211,7 +211,7 @@ def _shell_segments(command):
                 quote = None
         elif character in {"'", '"'}:
             quote = character
-        elif character in ";&|\n":
+        elif character in separators:
             yield command[start:index]
             start = index + 1
     yield command[start:]
@@ -226,6 +226,8 @@ def _entrypoint_target(token, entry_url, unresolved=None):
                 raise ValueError("unsupported file URL authority")
             if parsed.scheme not in {"", "file"}:
                 return None
+            if re.search(r"%(?![0-9a-fA-F]{2})|%(?:2[fF]|5[cC])", parsed.path):
+                raise ValueError("invalid or unsupported encoded URL path separator")
             target = unquote(parsed.path, errors="strict")
         if not target or "\0" in target:
             raise ValueError("empty or NUL-containing path")
@@ -250,27 +252,25 @@ def _local_script_targets(command, unresolved=None):
             tokens = shlex.split(segment)
         except ValueError:
             continue
+        raw_words = [word for word in _shell_segments(segment, " \t\r") if word]
+        while tokens and raw_words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", raw_words[0]):
+            tokens.pop(0)
+            raw_words.pop(0)
         if not tokens or tokens[0] not in LOCAL_SCRIPT_INTERPRETERS:
             continue
         interpreter = tokens[0]
         non_file_modes = NON_FILE_MODES[interpreter]
         entry_url = False
+        inspecting = False
         index = 1
         while index < len(tokens):
             token = tokens[index]
-            if interpreter == "node" and token == "inspect":
-                arguments = tokens[index + 1:]
-                if not arguments:
-                    break
-                target = arguments[0]
-                if re.fullmatch(r"[^:]+:\d+", target) or (len(arguments) == 2 and target == "-p" and arguments[1].isdigit()):
-                    break  # Attach to an existing debugger/process, not a file.
-                if re.fullmatch(r"--port=\d+", target):
-                    target = arguments[1] if len(arguments) > 1 else ""
-                target = _entrypoint_target(target, False, unresolved)
-                if target is not None:
-                    yield target
-                break
+            if interpreter == "node" and token == "inspect" and not inspecting:
+                inspecting = True
+                index += 1
+                continue
+            if inspecting and re.fullmatch(r"[^:]+:\d+", token):
+                break  # Remote debugger attachment.
             if interpreter == "node" and token in {"--entry-url", "--experimental-entry-url"}:
                 entry_url = True
                 index += 1
@@ -333,8 +333,6 @@ def _check_package_scripts(target, sink, unresolved):
         script_unresolved = []
         for raw_path in _local_script_targets(command, script_unresolved):
             raw_path = raw_path.strip('"\'')
-            if "://" in raw_path:
-                continue
             try:
                 candidate = Path(raw_path)
                 local = candidate.resolve() if candidate.is_absolute() else (target / candidate).resolve()
