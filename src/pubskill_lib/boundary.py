@@ -62,7 +62,7 @@ def iter_files(root: Path, skip: set[str] | None = None) -> list[Path]:
     skip = set(skip if skip is not None else DEFAULT_SKIP)
     found: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in skip)
+        dirnames[:] = sorted(d for d in dirnames if d not in skip and not d.startswith(".examiner-originals-"))
         for name in sorted(filenames):
             path = Path(dirpath) / name
             try:

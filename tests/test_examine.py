@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -87,16 +88,11 @@ class RatiosEngineTests(unittest.TestCase):
         self.assertEqual([0, 1], adapter.opening_boundary(lines))
         self.assertEqual(2, ratios.opening_index(lines, adapter))
 
-        new, _ = ratios.place_ratios(
-            "\n".join(lines) + "\n",
-            "#",
-            {"loc_comments": "1:0", "imports_exports": "1:0", "calls_definitions": "0:0"},
-            adapter,
-        )
-        out = new.splitlines()
-        self.assertTrue(out[0].startswith("#!"))
-        self.assertIn("coding", out[1])
-        self.assertTrue(out[2].startswith("# ratios:"))
+        with self.assertRaises(ratios.UnsupportedPlacementError):
+            ratios.place_ratios(
+                "\n".join(lines) + "\n", "#",
+                {"loc_comments": "1:0", "imports_exports": "1:0", "calls_definitions": "0:0"}, adapter,
+            )
 
     def test_find_internal_dependencies_python(self):
         from pubskill_lib import ratios_adapters
@@ -169,9 +165,22 @@ class ExamineCliTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(before, (self.root / "tool.py").read_text())
 
+    def test_json_apply_reports_recovery_paths(self):
+        (self.root / "recovery_probe.py").write_text("print('fresh source')\n")
+        result = self._run("--apply", "--json")
+        self.assertEqual(0, result.returncode, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertTrue(report["preserved_sources"])
+        for relative in report["preserved_sources"].values():
+            self.assertTrue((self.root / relative).is_file())
+
     def test_apply_writes_ratios_and_assembles_docs(self):
+        (self.root / "recovery_probe.py").write_text("print('fresh source')\n")
+        shell_before = (self.root / "run.sh").read_bytes()
         result = self._run("--apply", "--out", "docs/examiner")
         self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("preserved source:", result.stdout)
+        self.assertIn(".examiner-originals-", result.stdout)
 
         tool = (self.root / "tool.py").read_text().splitlines()
         self.assertTrue(tool[0].startswith("#!"))
@@ -180,7 +189,8 @@ class ExamineCliTests(unittest.TestCase):
 
         shell = (self.root / "run.sh").read_text().splitlines()
         self.assertTrue(shell[0].startswith("#!"))
-        self.assertTrue(shell[1].startswith("# ratios: loc_comments=hmmm"))
+        self.assertEqual(shell_before, (self.root / "run.sh").read_bytes())
+        self.assertFalse(any("ratios:" in line for line in shell))
 
         ts = (self.root / "lib" / "util.ts").read_text().splitlines()
         self.assertTrue(ts[0].startswith("// ratios: loc_comments="))

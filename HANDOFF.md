@@ -15,12 +15,18 @@ VM contract: `HANDOFF.vm.md`
 
 A stranger clones this repository, runs the commands in README.md, and gets a findings file for `examples/neglected-repo`.
 
-That is `v0.2.0`. Nothing else is the first tag. A VM receipt is not a tag.
+That is the `v0.2.0` release gate. A VM receipt is not a tag, and an implementation on `main` is not a published release.
+
+## Current closure
+
+- The clean-checkout gate runs in GitHub CI on Python 3.11 and 3.12.
+- `v0.2.0` remains unpublished until the repaired head is merged and the tag is explicitly created.
+- Provider base-URL overrides are operator configuration: they may come from the process environment, never from a repository `.env` file.
 
 ## Non-goals for this handoff
 
 - Do not port the full skill-lib catalog.
-- Do not implement `--fix-one` until inspect works (that is `v0.3.0`).
+- Do not add `--fix-one` to v0.2; remote execution and repair require later versioned work.
 - Do not host a SaaS.
 - Do not rewrite msdmd.
 - Do not add Way / UCNS / energy text to README.
@@ -123,11 +129,12 @@ python -m pubskill_lib.audit PATH --out findings.json
 
 v0.2 inspect only:
 
-- read README / pyproject / package.json / lockfiles / `.github/workflows/*`
+- read README, `pyproject.toml`, `package.json`, and `.github/workflows/*`
 - record identity if `.git` exists, else `hmmm`
-- flag README links to missing local files
-- flag workflows that claim tests but only `echo`
-- flag missing advertised scripts
+- flag README links to missing local files or paths that escape the repository
+- flag workflows that claim tests but only `echo`/no-op
+- flag Python console scripts whose modules are missing
+- flag direct local `package.json` script targets invoked by node/python/bash/sh when the referenced file is missing or escapes the repository
 - do not install target deps
 - do not run target tests
 
@@ -135,7 +142,7 @@ Exit 0 if the tool ran. Do not exit nonzero just because the target repo is sick
 
 ## Step D — fixture
 
-`examples/neglected-repo` must contain at least three evidenced defects the CLI will see without `--run`:
+`examples/neglected-repo` must contain at least three evidenced defects the CLI will see without execution:
 
 1. README references a file that does not exist
 2. CI workflow named like tests that does not invoke a test runner
@@ -155,7 +162,7 @@ Compare on `id`, `class`, and `surface`.
 
 Optional if time or disk is scarce. Prefer A–D first.
 
-From skill-lib at the SOURCE.md SHA, copy only `msdmd` and `repo-audit-repair` into `.agents/skills/` and write `.agents/skills/README.md` with the SHA. Do not copy the rest of skill-lib.
+From skill-lib at the SOURCE.md SHA, copy only `msdmd` and `repo-audit-repair` into `.agents/skills/` and write `.agents/skills/README.md` with the same SHA. Do not copy the rest of skill-lib.
 
 ## Step F — tests in this repo
 
@@ -165,20 +172,24 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/out.json
 ```
 
-A `.github/workflows/ci.yml` may be added. The VM does not push it unless `PUSH=1`.
+CI runs this gate on Python 3.11 and 3.12. The VM does not push unless `PUSH=1`.
 
 ## Step G — close the public door
 
 Not a VM default. Requires `PUSH=1`.
 
-1. Rewrite README status table: inspect ships.
-2. Tag `v0.2.0`.
-3. Add this repo to skill-lib consumer list only with `WRITE_CANON=1`.
+1. Merge only a head that passes the full gate and required review.
+2. Create tag `v0.2.0` explicitly from the accepted release commit.
+3. Claim the release as shipped only after the tag exists.
+4. Add this repo to skill-lib consumer list only with `WRITE_CANON=1`.
 
 ## Done / not done
 
-Done: clean clone → install → unittest → audit fixture → findings.json.
+Done at a verified release head: clean clone → install → unittest → audit fixture → findings.json.
 
-Not done: stars, SaaS, full catalog, architectural-drift theater, selling VERIFIED on the zip.
+Not done: stars, SaaS, full catalog, remote execution/repair, architectural-drift theater, selling VERIFIED on the zip.
 
-hmmm — if the fixture expected file was authored by hand and never produced by the CLI, the utility is still fake.
+## hmmm
+
+- Remote URL inspection, remote commit selection, target execution, and repair semantics remain outside v0.2 until separately specified.
+- The fixture is continuously checked against live CLI output on `id`, `class`, and `surface`; provenance of its original byte-for-byte generation is not retained.

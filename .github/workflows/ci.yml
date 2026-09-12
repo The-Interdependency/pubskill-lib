@@ -1,16 +1,29 @@
 name: ci
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
         with:
-          python-version: '3.12'
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
       - run: |
           python -m venv .venv
           . .venv/bin/activate
           python -m pip install -e .
           python -m unittest discover -s tests
           python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
+          python -m pip wheel . --no-deps -w /tmp/pubskill-wheel
+          python -m venv /tmp/pubskill-wheel-venv
+          /tmp/pubskill-wheel-venv/bin/python -m pip install --no-deps /tmp/pubskill-wheel/pubskill_lib-*.whl
+          cd /tmp
+          /tmp/pubskill-wheel-venv/bin/python -c "from pubskill_lib import evidence; assert evidence._comment_markers()['.py'] == '#'"

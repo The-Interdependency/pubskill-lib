@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from . import source_boundaries
 
 RATIO_IDS = ("loc_comments", "imports_exports", "calls_definitions")
 SHEBANG_RE = re.compile(r"^#!.*$")
@@ -135,10 +136,11 @@ def render_ratios_line(marker: str, values: dict[str, str]) -> str:
     return f"{marker} ratios: {body}"
 
 
-def strip_ratios_lines(text: str, marker: str) -> list[str]:
-    """Return the file's lines with every ratios line removed."""
-    line_re = _ratios_line_re(marker)
-    return [line for line in text.splitlines() if not line_re.match(line.rstrip())]
+def strip_ratios_lines(text: str, marker: str, adapter=None) -> list[str]:
+    """Remove only the reserved bookends, preserving source-literal contents."""
+    lines = text.splitlines()
+    indices, _ = source_boundaries.metadata_indices(lines, marker, adapter)
+    return [line for index, line in enumerate(lines) if index not in indices]
 
 
 def opening_index(lines: list[str], adapter: LanguageRatioAdapter | None) -> int:
@@ -148,11 +150,11 @@ def opening_index(lines: list[str], adapter: LanguageRatioAdapter | None) -> int
     adapter, the default rule applies: a shebang stays first and the seal
     follows it.
     """
-    if adapter is not None:
-        protected = adapter.opening_boundary(lines)
-    else:
-        protected = [0] if lines and SHEBANG_RE.match(lines[0].rstrip()) else []
-    return max(protected, default=-1) + 1
+    return source_boundaries.opening_index(lines, adapter)
+
+
+class UnsupportedPlacementError(ValueError):
+    """Protected source lines conflict with the pinned canonical seal boundary."""
 
 
 def place_ratios(
@@ -166,8 +168,7 @@ def place_ratios(
     Returns ``(new_text, changed)``. Existing ratios lines are removed and
     re-placed. The closing line is the last non-blank line.
     """
-    line_re = _ratios_line_re(marker)
-    lines = [raw for raw in text.splitlines() if not line_re.match(raw.rstrip())]
+    lines = strip_ratios_lines(text, marker, adapter)
     opening = render_ratios_line(marker, values)
 
     lines.insert(opening_index(lines, adapter), opening)
@@ -179,6 +180,9 @@ def place_ratios(
     new_text = "\n".join(lines)
     if lines:
         new_text += "\n"
+    from . import _msdmd_universal
+    if _msdmd_universal.ratios_placement(new_text, marker) != (True, True):
+        raise UnsupportedPlacementError("protected source prologue conflicts with pinned canonical RATIOS placement; mutation skipped")
     return new_text, new_text != text
 
 

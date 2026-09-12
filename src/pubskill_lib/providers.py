@@ -1,13 +1,8 @@
-"""BYOK provider access. Credentials come from environment/.env and are
-never printed, logged, or returned by this layer.
+"""BYOK provider access.
 
-Supported providers (configurable through environment):
-
-    OPENAI_API_KEY, OPENAI_BASE_URL (default api.openai.com/v1), OPENAI_MODEL
-    ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL (default api.anthropic.com), ANTHROPIC_MODEL
-
-Multiple providers are attempted sequentially by default; callers may also
-drive them concurrently across files.
+Credentials may come from the process environment or a local .env file. Base
+URL overrides are process-environment-only so a target repository cannot pair
+an operator's ambient API key with a repository-controlled endpoint.
 """
 
 from __future__ import annotations
@@ -19,6 +14,7 @@ from pathlib import Path
 
 DEFAULT_OPENAI_BASE = "https://api.openai.com/v1"
 DEFAULT_ANTHROPIC_BASE = "https://api.anthropic.com"
+_BASE_URL_KEYS = {"OPENAI_BASE_URL", "ANTHROPIC_BASE_URL"}
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -41,8 +37,10 @@ def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
 
 
 def env_with_dotenv(path: str | Path = ".env") -> dict[str, str]:
-    """Merged os.environ plus .env values (os.environ wins)."""
+    """Merge .env with os.environ; base URL overrides come only from os.environ."""
     merged = dict(load_dotenv(path))
+    for key in _BASE_URL_KEYS:
+        merged.pop(key, None)
     merged.update(os.environ)
     return merged
 
@@ -63,15 +61,15 @@ class Provider:
         self.name = name
         self.env = env
         self.key = env.get(self.key_env(), "")
-        self.model = env.get(self.model_env(), self.default_model())
+        self.model = env.get(self.model_env()) or self.default_model()
 
-    def key_env(self) -> str:  # pragma: no cover - overridden
+    def key_env(self) -> str:
         raise NotImplementedError
 
-    def model_env(self) -> str:  # pragma: no cover - overridden
+    def model_env(self) -> str:
         raise NotImplementedError
 
-    def default_model(self) -> str:  # pragma: no cover - overridden
+    def default_model(self) -> str:
         raise NotImplementedError
 
     def configured(self) -> bool:
@@ -80,7 +78,7 @@ class Provider:
     def describe(self) -> str:
         return f"{self.name} model={self.model or 'hmmm'} key={_mask(self.key) if self.key else 'absent'}"
 
-    def chat(self, system: str, user: str) -> str:  # pragma: no cover - overridden
+    def chat(self, system: str, user: str) -> str:
         raise NotImplementedError
 
 
@@ -100,10 +98,7 @@ class OpenAIProvider(Provider):
         return "gpt-4o-mini"
 
     def chat(self, system: str, user: str) -> str:
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.key}",
-        }
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"}
         payload = {
             "model": self.model,
             "messages": [
@@ -148,17 +143,19 @@ class AnthropicProvider(Provider):
 
 
 def configured_providers(env: dict[str, str]) -> list[Provider]:
-    """Return providers with credentials, in stable order."""
+    """Return configured providers in stable fallback order."""
     providers = [OpenAIProvider(env), AnthropicProvider(env)]
-    return [p for p in providers if p.configured()]
+    return [provider for provider in providers if provider.configured()]
 
 
-def chat_with_fallback(providers: list[Provider], system: str, user: str) -> tuple[str, str]:
-    """Try providers sequentially. Returns (text, provider_name) or raises."""
+def chat_with_fallback(
+    providers: list[Provider], system: str, user: str
+) -> tuple[str, str, str]:
+    """Try providers sequentially. Return (text, provider_name, model)."""
     errors: list[str] = []
     for provider in providers:
         try:
-            return provider.chat(system, user), provider.name
-        except Exception as exc:  # noqa: BLE001 - boundary to hmmm, never to crash
+            return provider.chat(system, user), provider.name, provider.model
+        except Exception as exc:  # boundary failure remains visible without leaking secrets
             errors.append(f"{provider.name}: {type(exc).__name__}")
     raise RuntimeError("; ".join(errors) or "no providers configured")

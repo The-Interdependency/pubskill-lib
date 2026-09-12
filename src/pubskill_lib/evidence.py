@@ -1,34 +1,59 @@
 """Evidence engine: inventory actual code before describing it.
 
-This layer never infers behavior from names, layout, or convention. It reads
-files and records what is actually there: language marker, shebang, existing
-msdmd blocks, existing RATIOS lines, content hash, size, and executable bit.
+Language comment markers and entry grammar are loaded from the packaged copy of
+the pinned canonical msdmd parser; this module does not maintain a second
+dialect. ``sha256`` is the stable source evidence hash: generated examiner
+NARRATIVE blocks and RATIOS seals are excluded when the source can be decoded.
+``raw_sha256`` is always the literal file-byte hash.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import re
+import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import _msdmd_universal as _canonical_msdmd
 from . import boundary
-
-# extension -> comment marker (same table as canon msdmd)
-MARKERS: dict[str, str] = {
-    ".py": "#", ".rb": "#", ".ex": "#", ".exs": "#", ".sh": "#",
-    ".ts": "//", ".tsx": "//", ".js": "//", ".jsx": "//", ".mjs": "//",
-    ".rs": "//", ".go": "//", ".java": "//", ".c": "//", ".cpp": "//",
-    ".cc": "//", ".h": "//", ".hpp": "//", ".swift": "//", ".kt": "//",
-    ".sql": "--", ".lua": "--", ".hs": "--",
-}
+from . import ratios, source_boundaries
 
 SHEBANG_RE = re.compile(r"^#!.*$")
-_RATIOS_LINE_RE = re.compile(r"^(?:#|//|--)\s*ratios:\s*(.+?)\s*$")
-_NARRATIVE_FENCE_RE = re.compile(
-    r"^(?:#|//|--) === NARRATIVE ===\s*$.*?^(?:#|//|--) === END NARRATIVE ===\s*$",
-    re.MULTILINE | re.DOTALL,
-)
+_RATIOS_LINE_RE = re.compile(r"^(?:#|//|--|%|;|!|'|\*>)\s*ratios:\s*(.+?)\s*$")
+_PYTHON_SUFFIXES = {".py", ".pyw", ".pyi"}
+
+
+def _msdmd_parser():
+    """Return the packaged, source-pinned canonical msdmd parser module."""
+    return _canonical_msdmd
+
+
+def _comment_markers() -> dict[str, str]:
+    """Load COMMENT_MARKERS from the packaged canonical msdmd parser."""
+    markers = getattr(_msdmd_parser(), "COMMENT_MARKERS", {})
+    return dict(markers) if isinstance(markers, dict) else {}
+
+
+def source_text(text: str, marker: str | None, path: Path | None = None) -> str:
+    """Return source text with complete generated NARRATIVE/RATIOS metadata removed.
+
+    Trailing blank lines are normalized because RATIOS placement already removes
+    them. Incomplete NARRATIVE fences are preserved rather than guessed away.
+    """
+    if marker is None:
+        return text
+
+    lines = text.splitlines()
+    adapter = ratios.default_adapter_for(path) if path is not None else None
+    bookends, narrative = source_boundaries.metadata_indices(lines, marker, adapter)
+    excluded = bookends | narrative
+    kept = [line for index, line in enumerate(lines) if index not in excluded]
+
+    while kept and not kept[-1].strip():
+        kept.pop()
+    return "\n".join(kept) + ("\n" if kept else "")
 
 
 @dataclass
@@ -41,82 +66,92 @@ class FileEvidence:
     msdmd_blocks: dict[str, list[dict]] = field(default_factory=dict)
     narrative_entries: list[dict] = field(default_factory=list)
     sha256: str = ""
+    raw_sha256: str = ""
     size: int = 0
     executable: bool = False
+    encoding: str | None = "utf-8"
     hmmm: list[str] = field(default_factory=list)
 
 
-def _block_name_re(marker: str) -> re.Pattern[str]:
+def _block_names(text: str, marker: str) -> list[str]:
+    """Return distinct declared block names; canonical parser owns entry grammar."""
     m = re.escape(marker)
-    return re.compile(rf"^{m} === ([A-Z_]+) ===\s*$(?P<body>.*?)^{m} === END \1 ===\s*$", re.MULTILINE | re.DOTALL)
+    start_re = re.compile(rf"^{m} === (?P<name>[A-Z_]+) ===\s*$", re.MULTILINE)
+    return list(dict.fromkeys(match.group("name") for match in start_re.finditer(text)))
 
 
-def _parse_block_entries(marker: str, body: str) -> list[dict]:
-    m = re.escape(marker)
-    id_re = re.compile(rf"^\s*{m}\s*id:\s*(?P<id>\S+)\s*$")
-    field_re = re.compile(rf"^\s*{m}\s+(?P<key>[a-z_]+):\s*(?P<val>.+?)\s*$")
-    entries: list[dict] = []
-    current: dict[str, str] | None = None
-    for line in body.splitlines():
-        line = line.rstrip()
-        mid = id_re.match(line)
-        if mid:
-            if current is not None:
-                entries.append(current)
-            current = {"id": mid.group("id")}
-            continue
-        if current is None:
-            continue
-        mf = field_re.match(line)
-        if mf:
-            current[mf.group("key")] = mf.group("val")
-    if current is not None:
-        entries.append(current)
-    return entries
+def _decode_source(path: Path, raw: bytes) -> tuple[str | None, str | None, str | None]:
+    """Decode source without changing byte identity; honor Python coding cookies."""
+    if path.suffix.lower() in _PYTHON_SUFFIXES:
+        try:
+            encoding, _ = tokenize.detect_encoding(io.BytesIO(raw).readline)
+            return raw.decode(encoding), encoding, None
+        except (LookupError, SyntaxError, UnicodeDecodeError) as exc:
+            return None, None, f"source encoding unresolved: {exc}"
+    try:
+        encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
+        return raw.decode(encoding), encoding, None
+    except UnicodeDecodeError as exc:
+        return None, None, f"source encoding unresolved: {exc}"
 
 
 def read_evidence(root: Path, path: Path) -> FileEvidence:
-    """Read one file into evidence. Never raises for unsupported files."""
     root = Path(root).resolve()
     rel = str(path.relative_to(root))
-    marker = MARKERS.get(path.suffix.lower())
+    marker = _comment_markers().get(path.suffix.lower())
     language = path.suffix.lower().lstrip(".") or "unknown"
-    evidence = FileEvidence(path=rel, language=language, marker=marker)
+    item = FileEvidence(path=rel, language=language, marker=marker)
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        raw = path.read_bytes()
     except OSError:
-        evidence.hmmm.append("unreadable file")
-        return evidence
-    evidence.sha256 = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
-    evidence.size = len(text.encode("utf-8", errors="replace"))
+        item.hmmm.append("unreadable file")
+        return item
+
+    item.raw_sha256 = hashlib.sha256(raw).hexdigest()
+    item.size = len(raw)
     try:
-        evidence.executable = bool(path.stat().st_mode & 0o111)
+        item.executable = bool(path.stat().st_mode & 0o111)
     except OSError:
         pass
 
+    text, item.encoding, decode_hmmm = _decode_source(path, raw)
+    if text is None:
+        item.sha256 = item.raw_sha256
+        item.marker = None
+        item.hmmm.append(decode_hmmm or "source encoding unresolved")
+        item.hmmm.append("metadata-excluding source hash unavailable; mutation disabled")
+        return item
+
+    try:
+        stable_encoded = source_text(text, marker, path).encode("utf-8")
+    except UnicodeError as error:
+        item.sha256 = item.raw_sha256
+        item.marker = None
+        item.encoding = None
+        item.hmmm.append(f"source encoding unresolved while hashing: {error}")
+        item.hmmm.append("metadata-excluding source hash unavailable; mutation disabled")
+        return item
+    item.sha256 = hashlib.sha256(stable_encoded).hexdigest()
+
     first_line = text.splitlines()[0].rstrip() if text.splitlines() else ""
     if SHEBANG_RE.match(first_line):
-        evidence.shebang = first_line
+        item.shebang = first_line
 
     if marker is not None:
-        for raw in text.splitlines():
-            if _RATIOS_LINE_RE.match(raw.rstrip()):
-                evidence.ratios_lines.append(raw.rstrip())
-        block_re = _block_name_re(marker)
-        for match in block_re.finditer(text):
-            name = match.group(1)
-            entries = _parse_block_entries(marker, match.group("body"))
-            evidence.msdmd_blocks.setdefault(name, []).extend(entries)
-        evidence.narrative_entries = evidence.msdmd_blocks.get("NARRATIVE", [])
+        lines = text.splitlines()
+        bookends, narrative_indices = source_boundaries.metadata_indices(lines, marker, ratios.default_adapter_for(path))
+        item.ratios_lines = [lines[index].rstrip() for index in sorted(bookends)]
+        parser = _msdmd_parser()
+        for name in _block_names(text, marker):
+            block_text = "\n".join(lines[index] for index in sorted(narrative_indices)) if name == "NARRATIVE" else text
+            entries = parser.parse_text(block_text, name, marker)
+            item.msdmd_blocks[name] = entries
+        item.narrative_entries = item.msdmd_blocks.get("NARRATIVE", [])
     else:
-        evidence.hmmm.append(f"unsupported language for msdmd: .{language}")
-    return evidence
+        item.hmmm.append(f"unsupported language for msdmd: .{language}")
+    return item
 
 
 def inventory(root: Path) -> list[FileEvidence]:
-    """Inventory every regular file inside the boundary."""
     root = boundary.assert_inside(root, root)
-    out: list[FileEvidence] = []
-    for path in boundary.iter_files(root):
-        out.append(read_evidence(root, path))
-    return out
+    return [read_evidence(root, path) for path in boundary.iter_files(root)]

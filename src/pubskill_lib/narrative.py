@@ -1,8 +1,7 @@
 """Model reasoning layer: evidence-bound narrative generation.
 
-A narrative is descriptive evidence about one file, bound to the exact
-content hash that produced it. If the file changes and the narrative does
-not, the narrative is stale and the assembler flags it.
+A narrative is descriptive evidence about one file, bound to the exact content
+hash that produced it. Successful generations also record provider and model.
 """
 
 from __future__ import annotations
@@ -46,7 +45,6 @@ def narrate_file(
     provider_list: list[providers.Provider],
     now: str,
 ) -> Narrative:
-    """Return an evidence-bound narrative entry for one file."""
     entry = {
         "id": narrative_id(ev.sha256),
         "summary": "",
@@ -68,12 +66,13 @@ def narrate_file(
         entry["provider"] = "none"
     else:
         try:
-            summary, name = providers.chat_with_fallback(
+            summary, name, model = providers.chat_with_fallback(
                 provider_list, SYSTEM_PROMPT, _user_prompt(ev, text)
             )
             entry["summary"] = " ".join(summary.split())
             entry["provider"] = name
-        except Exception as exc:  # noqa: BLE001 - provider failure is hmmm
+            entry["model"] = model or "hmmm"
+        except Exception as exc:  # provider failure remains visible as hmmm
             hmmm.append(f"model reasoning failed: {type(exc).__name__}")
 
     if hmmm:
@@ -83,5 +82,4 @@ def narrate_file(
 
 
 def is_stale(entry: dict[str, str], current_sha256: str) -> bool:
-    """A narrative is stale when its evidence hash no longer matches."""
     return entry.get("evidence_sha256") != current_sha256

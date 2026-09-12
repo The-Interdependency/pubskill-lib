@@ -3,14 +3,15 @@
 Usage:
     python -m pubskill_lib.audit PATH --out findings.json
 
-v0.2 inspect only: read declared files, record identity, flag evidenced
-repository defects. Never install target deps, never run target tests.
-Exit 0 when the tool ran; exit 3 on tool/schema failures.
+v0.2 inspect only: read declared files, record identity, and flag evidenced
+repository defects. It never installs target dependencies or runs target tests.
 """
 
 import argparse
 import json
 import re
+import shlex
+from urllib.parse import unquote, urlsplit
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,52 @@ TEST_RUNNER_PATTERN = re.compile(
 ECHO_OR_NOOP_PATTERN = re.compile(r"\b(echo|true|exit\s+0|printf)\b", re.IGNORECASE)
 MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 PIN_PATTERN = re.compile(r"`([0-9a-f]{40})`")
+LOCAL_SCRIPT_INTERPRETERS = {"node", "python", "python3", "bash", "sh"}
+NON_FILE_MODES = {
+    "node": {"-e", "--eval", "-p", "--print", "--run", "-h", "--help", "-v", "--version", "--v8-options", "--completion-bash"},
+    "python": {"-c", "-m", "-h", "-?", "--help", "-V", "--version", "--help-env", "--help-xoptions", "--help-all"},
+    "python3": {"-c", "-m", "-h", "-?", "--help", "-V", "--version", "--help-env", "--help-xoptions", "--help-all"},
+    "bash": {"-c", "--help", "--version"},
+    "sh": {"-c", "--help", "--version"},
+}
+BOOLEAN_OPTIONS = {
+    "node": {"--trace-warnings", "--inspect", "--inspect-brk", "--inspect-wait", "--watch", "--test", "--no-warnings", "--enable-source-maps", "--experimental-strip-types", "--experimental-transform-types", "--abort-on-uncaught-exception", "--check", "--interactive", "-c", "-i"},
+    "python": {"-" + character for character in "bBdEiIOPqRsSuvx"},
+    "python3": {"-" + character for character in "bBdEiIOPqRsSuvx"},
+    "bash": {"-" + character for character in "abefhkmnptuvxBCEHPTlirs"} | {"+" + character for character in "abefhkmnptuvxBCEHPTlirs"} | {"--debugger", "--dump-po-strings", "--dump-strings", "--noprofile", "--norc", "--posix", "--restricted", "--verbose", "--login"},
+    "sh": {"-" + character for character in "aefnuvxCImps"} | {"+" + character for character in "aefnuvxCImps"},
+}
+
+VALUE_OPTIONS = {
+    "python": {"-W", "-X", "--check-hash-based-pycs"},
+    "python3": {"-W", "-X", "--check-hash-based-pycs"},
+    "bash": {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"},
+    "sh": {"-o", "+o"},
+    "node": {
+        "--allow-fs-read", "--allow-fs-write", "--build-snapshot-config", "--conditions",
+        "--cpu-prof-dir", "--cpu-prof-interval", "--cpu-prof-name", "--debug-port",
+        "--diagnostic-dir", "--disable-proto", "--disable-warning", "--dns-result-order",
+        "--env-file", "--env-file-if-exists", "--experimental-config-file",
+        "--experimental-default-type", "--experimental-loader", "--experimental-sea-config",
+        "--experimental-package-map", "--experimental-test-tag-filter", "--experimental-test-isolation", "--heap-prof-dir", "--heap-prof-interval",
+        "--heap-prof-name", "--heapsnapshot-near-heap-limit", "--heapsnapshot-signal",
+        "--icu-data-dir", "--import", "--input-type", "--inspect-port",
+        "--inspect-publish-uid", "--loader", "--localstorage-file", "--max-http-header-size",
+        "--max-old-space-size", "--max-old-space-size-percentage", "--max-semi-space-size",
+        "--network-family-autoselection-attempt-timeout", "--openssl-config",
+        "--redirect-warnings", "--report-dir", "--report-directory", "--report-filename",
+        "--report-signal", "--require", "--secure-heap", "--secure-heap-min",
+        "--snapshot-blob", "--stack-trace-limit", "--test-concurrency",
+        "--test-coverage-branches", "--test-coverage-exclude", "--test-coverage-functions",
+        "--test-coverage-include", "--test-coverage-lines", "--test-name-pattern",
+        "--test-global-setup", "--test-isolation", "--test-random-seed", "--test-rerun-failures",
+        "--test-reporter", "--test-reporter-destination", "--test-shard",
+        "--test-skip-pattern", "--test-timeout", "--title", "--tls-cipher-list",
+        "--tls-keylog", "--trace-event-categories", "--trace-event-file-pattern",
+        "--trace-require-module", "--unhandled-rejections", "--use-largepages",
+        "--v8-pool-size", "--watch-kill-signal", "--watch-path", "-C", "-r",
+    },
+}
 
 
 class _Sink:
@@ -65,12 +112,13 @@ def _git_identity(target):
 
     def run(args):
         try:
-            return subprocess.run(
+            result = subprocess.run(
                 ["git", "-C", str(target), *args],
                 capture_output=True,
                 text=True,
                 timeout=10,
-            ).stdout.strip()
+            )
+            return result.stdout.strip() if result.returncode == 0 else None
         except (OSError, subprocess.SubprocessError):
             return None
 
@@ -95,12 +143,13 @@ def _check_readme_links(target, sink):
                 if local.startswith("/"):
                     continue
                 resolved = (readme.parent / local).resolve()
+                try:
+                    resolved.relative_to(target.resolve())
+                except ValueError:
+                    sink.add("docs", f"README link escapes repository: {dest}", f"{name}:{lineno}")
+                    continue
                 if not resolved.exists():
-                    sink.add(
-                        "docs",
-                        f"README links to {dest}",
-                        f"{name}:{lineno}",
-                    )
+                    sink.add("docs", f"README links to {dest}", f"{name}:{lineno}")
 
 
 def _check_ci_workflows(target, sink):
@@ -135,30 +184,310 @@ def _module_exists(target, module):
     return any(candidate.exists() for candidate in candidates)
 
 
-def _check_declared_scripts(target, sink):
+def _check_pyproject_scripts(target, sink):
     pyproject = target / "pyproject.toml"
     text = _read_text(pyproject)
     if text is None:
         return
     try:
         import tomllib
-    except ImportError:  # pragma: no cover - requires Python 3.11+
-        return
-    try:
         data = tomllib.loads(text)
-    except Exception:
+    except (ImportError, ValueError):
         return
     scripts = (data.get("project") or {}).get("scripts") or {}
     for name in sorted(scripts):
         entry = str(scripts[name])
         module = entry.split(":", 1)[0].strip()
-        if not module or _module_exists(target, module):
+        if module and not _module_exists(target, module):
+            sink.add(
+                "deps",
+                f"declared script {name} points to missing module {module}",
+                "pyproject.toml [project.scripts]",
+            )
+
+
+def _shell_segments(command, separators=";&|\n"):
+    """Split direct shell commands while retaining quoted/escaped separators."""
+    start, quote, escaped, comment = 0, None, False, False
+    for index, character in enumerate(command):
+        if comment:
+            if character == "\n":
+                comment = False
+                start = index + 1
             continue
-        sink.add(
-            "deps",
-            f"declared script {name} points to missing module {module}",
-            "pyproject.toml [project.scripts]",
-        )
+        if escaped:
+            escaped = False
+        elif character == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            if character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+        elif character == "#" and (index == 0 or command[index - 1] in " \t\r\n;&|()"):
+            yield command[start:index]
+            comment = True
+        elif character in separators:
+            yield command[start:index]
+            start = index + 1
+    if not comment:
+        yield command[start:]
+
+
+def _shell_context_gap(segment, *, context_only=False):
+    """Identify unsupported syntax, separating word expansion from shell structure."""
+    quote, escaped, word_start = None, False, 0
+    for index, character in enumerate(segment):
+        if escaped:
+            if character == "\n":
+                return "shell line continuation is outside literal-path audit scope"
+            escaped = False
+            continue
+        if quote is None and character.isspace():
+            word_start = index + 1
+            continue
+        if character == "\\" and quote != "'":
+            escaped = True
+        elif quote == "'":
+            if character == "'":
+                quote = None
+        elif quote is None and (character in "`{}()<>" or segment[index:index + 2] == "$("):
+            return "shell control syntax is outside literal-path audit scope"
+        elif not context_only and (character in "$`" or (quote is None and
+                (character in "*?[]" or (character == "~" and (index == word_start or
+                 (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=", segment[word_start:index])
+                  or (segment[index - 1] == ":" and re.match(r"[A-Za-z_][A-Za-z0-9_]*=", segment[word_start:index])))))))):
+            return "shell word expansion is outside literal-path audit scope"
+        elif quote:
+            if character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+    return None
+
+
+def _fixed_word_arity(raw):
+    """Bounded proof that a supported option value remains one shell argument."""
+    quote, escaped = None, False
+    for index, character in enumerate(raw):
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote != "'":
+            escaped = True
+        elif quote == "'":
+            if character == "'":
+                quote = None
+        elif quote == '"':
+            if character == '"':
+                quote = None
+            elif character == "$":
+                # Ordinary quoted scalar expansions have fixed arity. Positional
+                # arrays and complex parameter/substitution forms stay unresolved.
+                tail = raw[index:]
+                if not re.match(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9*#?$!]|\{[A-Za-z_][A-Za-z0-9_]*\})", tail):
+                    return False
+            elif character == "`":
+                return False
+        elif character in {"'", '"'}:
+            quote = character
+        elif character in "$`*?[]{}()<>" or character.isspace():
+            return False
+    return quote is None and not escaped
+
+
+def _attached_option_value(token, interpreter):
+    if token.startswith("--"):
+        return "=" in token and token.split("=", 1)[0] in VALUE_OPTIONS[interpreter]
+    if not token.startswith(("-", "+")):
+        return False
+    for position, character in enumerate(token[1:], start=1):
+        option = token[0] + character
+        if option in VALUE_OPTIONS[interpreter]:
+            return position < len(token) - 1
+        if option not in BOOLEAN_OPTIONS[interpreter]:
+            return False
+    return False
+
+
+def _entrypoint_target(token, entry_url, unresolved=None):
+    try:
+        target = token
+        if entry_url:
+            parsed = urlsplit(token)
+            if parsed.scheme == "file" and parsed.netloc not in {"", "localhost"}:
+                raise ValueError("unsupported file URL authority")
+            if parsed.scheme not in {"", "file"}:
+                return None
+            if re.search(r"%(?![0-9a-fA-F]{2})|%(?:2[fF]|5[cC])", parsed.path):
+                raise ValueError("invalid or unsupported encoded URL path separator")
+            target = unquote(parsed.path, errors="strict")
+        if not target or "\0" in target:
+            raise ValueError("empty or NUL-containing path")
+        return target
+    except (ValueError, UnicodeError) as error:
+        if unresolved is not None:
+            unresolved.append(f"unresolved entrypoint {token!r}: {error}")
+    return None
+
+
+def _local_script_targets(command, unresolved=None):
+    """Yield direct file operands after documented interpreter options.
+
+    This is a static audit of direct invocations, not a shell evaluator.
+    Python -W/-X, Bash -o/-O and startup files, and common Node value options
+    consume their arguments; attached values and -- delimiters are supported.
+    """
+    cwd_unknown = False
+    for segment in _shell_segments(command):
+        if not segment.strip():
+            continue
+        gap = _shell_context_gap(segment)
+        if gap and unresolved is not None:
+            unresolved.append(gap)
+        prior_cwd_unknown = cwd_unknown
+        cwd_unknown = cwd_unknown or bool(_shell_context_gap(segment, context_only=True))
+        try:
+            tokens = shlex.split(segment)
+        except ValueError as error:
+            cwd_unknown = True
+            if unresolved is not None:
+                unresolved.append(f"unparseable package script: {error}")
+            continue
+        raw_words = [word for word in _shell_segments(segment, " \t\r") if word]
+        while tokens and raw_words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", raw_words[0]):
+            tokens.pop(0)
+            raw_words.pop(0)
+        if not tokens:
+            continue
+        if _shell_context_gap(raw_words[0]):
+            cwd_unknown = True  # A dynamic command could resolve to a shell builtin.
+            continue
+        interpreter = Path(tokens[0]).name
+        if interpreter in {"cd", "pushd", "popd"}:
+            cwd_unknown = True
+            if unresolved is not None:
+                unresolved.append("working-directory change is outside direct-script audit scope")
+            continue
+        if interpreter not in LOCAL_SCRIPT_INTERPRETERS:
+            cwd_unknown = True
+            if unresolved is not None:
+                unresolved.append(f"command is outside direct interpreter audit scope: {tokens[0]!r}")
+            continue
+        if prior_cwd_unknown:
+            if unresolved is not None:
+                unresolved.append(f"script target after working-directory change is unresolved: {segment.strip()!r}")
+            continue
+        non_file_modes = NON_FILE_MODES[interpreter]
+        entry_url = False
+        inspecting = False
+        index = 1
+        while index < len(tokens):
+            token = tokens[index]
+            if _shell_context_gap(raw_words[index]):
+                if not _attached_option_value(token, interpreter) or not _fixed_word_arity(raw_words[index]):
+                    break
+            if interpreter == "node" and token == "inspect" and not inspecting:
+                inspecting = True
+                index += 1
+                continue
+            if inspecting and re.fullmatch(r"[^:]+:\d+", token):
+                break  # Remote debugger attachment.
+            if interpreter == "node" and token in {"--entry-url", "--experimental-entry-url"}:
+                entry_url = True
+                index += 1
+                continue
+            if token == "--":
+                if (index + 1 < len(tokens) and tokens[index + 1] != "-"
+                        and not _shell_context_gap(raw_words[index + 1])):
+                    target = _entrypoint_target(tokens[index + 1], entry_url, unresolved)
+                    if target is not None:
+                        yield target
+                break
+            if token == "-" or token.split("=", 1)[0] in non_file_modes:
+                break
+            if token in VALUE_OPTIONS[interpreter]:
+                if index + 1 < len(raw_words) and not _fixed_word_arity(raw_words[index + 1]):
+                    break
+                index += 2
+                continue
+            if token.startswith("-") or (interpreter in {"bash", "sh"} and token.startswith("+")):
+                if token.startswith("--"):
+                    option = token.split("=", 1)[0]
+                    if option not in BOOLEAN_OPTIONS[interpreter] and option not in VALUE_OPTIONS[interpreter] and not (inspecting and re.fullmatch(r"--port=\d+", token)):
+                        if unresolved is not None:
+                            unresolved.append(f"interpreter option arity is unresolved: {token!r}")
+                        break
+                # Short options may be clustered or carry an attached argument.
+                non_file = False
+                if not token.startswith("--"):
+                    modes = {mode[1:] for mode in non_file_modes if len(mode) == 2}
+                    if interpreter in {"bash", "sh"}:
+                        modes.add("s")  # Read commands from stdin.
+                    for position, option in enumerate(token[1:], start=1):
+                        if (token[0] == "-" and option in modes) or (interpreter == "bash" and option == "s"):
+                            non_file = True
+                            break
+                        if token[0] + option in VALUE_OPTIONS[interpreter]:
+                            if position == len(token) - 1:
+                                if index + 1 < len(raw_words) and not _fixed_word_arity(raw_words[index + 1]):
+                                    non_file = True
+                                index += 1
+                            break
+                        if token[0] + option not in BOOLEAN_OPTIONS[interpreter]:
+                            if unresolved is not None:
+                                unresolved.append(f"interpreter option arity is unresolved: {token!r}")
+                            non_file = True
+                            break
+                if non_file:
+                    break
+                index += 1
+                continue
+            target = _entrypoint_target(token, entry_url, unresolved)
+            if target is not None:
+                yield target
+            break
+
+
+def _check_package_scripts(target, sink, unresolved):
+    package = target / "package.json"
+    text = _read_text(package)
+    if text is None:
+        return
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        sink.add("deps", "package.json is not valid JSON", "package.json")
+        return
+    if not isinstance(data, dict):
+        sink.add("deps", "package.json top level is not an object", "package.json")
+        return
+    scripts = data.get("scripts") or {}
+    if not isinstance(scripts, dict):
+        return
+    for name, command in sorted(scripts.items()):
+        if not isinstance(command, str):
+            continue
+        script_unresolved = []
+        for raw_path in _local_script_targets(command, script_unresolved):
+            try:
+                candidate = Path(raw_path)
+                local = candidate.resolve() if candidate.is_absolute() else (target / candidate).resolve()
+            except (ValueError, OSError) as error:
+                script_unresolved.append(f"unresolved local path {raw_path!r}: {error}")
+                continue
+            try:
+                local.relative_to(target.resolve())
+            except ValueError:
+                sink.add("deps", f"package script {name} escapes repository via {raw_path}", "package.json [scripts]")
+                continue
+            if not local.exists():
+                sink.add(
+                    "deps",
+                    f"package script {name} points to missing local file {raw_path}",
+                    "package.json [scripts]",
+                )
+        unresolved.extend(f"package script {name}: {item}" for item in script_unresolved)
 
 
 def _read_source_pin():
@@ -169,7 +498,6 @@ def _read_source_pin():
 
 
 def audit_path(target_path, source_pin=None):
-    """Inspect one repository path and return a schema-valid document."""
     target = Path(target_path)
     source_pin = source_pin or _read_source_pin()
     document = new_document(source_pin, target_path)
@@ -191,9 +519,14 @@ def audit_path(target_path, source_pin=None):
         surfaces.append("ci")
         _check_ci_workflows(target, sink)
 
-    if (target / "pyproject.toml").exists() or (target / "package.json").exists():
+    has_pyproject = (target / "pyproject.toml").exists()
+    has_package = (target / "package.json").exists()
+    if has_pyproject or has_package:
         surfaces.append("deps")
-        _check_declared_scripts(target, sink)
+        if has_pyproject:
+            _check_pyproject_scripts(target, sink)
+        if has_package:
+            _check_package_scripts(target, sink, document["hmmm"])
 
     document["surfaces"] = surfaces
     document["findings"] = sink.finalize()
@@ -203,7 +536,7 @@ def audit_path(target_path, source_pin=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="python -m pubskill_lib.audit")
-    parser.add_argument("path", help="repository path to inspect")
+    parser.add_argument("path", help="local repository path to inspect")
     parser.add_argument("--out", required=True, help="findings.json output path")
     args = parser.parse_args(argv)
 
@@ -214,7 +547,7 @@ def main(argv=None):
 
     try:
         document = audit_path(target)
-    except Exception as exc:  # tool/schema failure, never the target's fault
+    except Exception as exc:
         print(f"pubskill_lib.audit: tool failure: {exc}", file=sys.stderr)
         return 3
 

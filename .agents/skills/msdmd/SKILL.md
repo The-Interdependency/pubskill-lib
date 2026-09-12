@@ -63,7 +63,9 @@ claims to prove those obligations. See
   referenced from external tooling).
 - **Field lines**: indented one level beneath the id (two spaces of
   visible indent inside the comment). Field names are lowercase
-  snake_case followed by `:` and a value.
+  snake_case followed by `:` and a value. Digits are allowed after the first
+  character, so `evidence_sha256` is valid; the first character must be a
+  lowercase letter or underscore.
 - **Multiple blocks per file**: a module may declare more than one
   block, of the same or different types. The parser concatenates
   entries.
