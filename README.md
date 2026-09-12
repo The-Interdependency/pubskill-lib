@@ -41,7 +41,7 @@ into two empty directories:
 python -m pip install uv==0.11.18
 uv venv --managed-python --python 3.11.15 /tmp/pubskill-build-env
 . /tmp/pubskill-build-env/bin/activate
-python -m pip install -r requirements-build.txt
+uv pip install --python /tmp/pubskill-build-env/bin/python -r requirements-build.txt
 python tools/build_release.py --out /tmp/pubskill-build-a
 python tools/build_release.py --out /tmp/pubskill-build-b
 diff /tmp/pubskill-build-a/SHA256SUMS /tmp/pubskill-build-b/SHA256SUMS
