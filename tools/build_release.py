@@ -94,7 +94,7 @@ def main() -> None:
     if any(out.iterdir()):
         raise SystemExit("release output directory must be empty")
     versions = {}
-    for requirement in (root / "requirements-build.txt").read_text().splitlines():
+    for requirement in git("show", f"{commit}:requirements-build.txt").splitlines():
         name, version = requirement.split("==")
         versions[name] = importlib.metadata.version(name)
         if versions[name] != version:
@@ -120,8 +120,8 @@ def main() -> None:
             else:
                 raise ValueError(f"unexpected build artifact: {artifact.name}")
     hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(out.iterdir())}
-    doctrine = json.loads((root / "src/pubskill_lib/_source.json").read_text())
-    manifest = {"schema": "pubskill-lib.release-manifest", "version": 1, "source_commit": commit, "source_tree": git("rev-parse", "HEAD^{tree}"), "source_date_epoch": epoch, "skill_lib_commit": doctrine["commit"], "build_toolchain": versions, "build_python": sys.version, "artifacts_sha256": hashes}
+    doctrine = json.loads(git("show", f"{commit}:src/pubskill_lib/_source.json"))
+    manifest = {"schema": "pubskill-lib.release-manifest", "version": 1, "source_commit": commit, "source_tree": git("rev-parse", f"{commit}^{{tree}}"), "source_date_epoch": epoch, "skill_lib_commit": doctrine["commit"], "build_toolchain": versions, "build_python": sys.version, "artifacts_sha256": hashes}
     receipt = out / "release-manifest.json"
     receipt.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     hashes = dict(hashes)
