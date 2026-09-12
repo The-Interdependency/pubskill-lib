@@ -92,20 +92,47 @@ class NarrativeBoundaryTests(unittest.TestCase):
             self.assertEqual([], report["changed"])
             self.assertIn("concurrent.py", report["hmmm"])
 
+    def test_conditional_publication_preserves_competing_writes(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "source.py"
+            original = b"original\n"
+            concurrent = b"concurrent\n"
+            path.write_bytes(original)
+            link = os.link
+            def competing_write(source, target, **kwargs):
+                if Path(source).name == "candidate":
+                    path.write_bytes(concurrent)
+                return link(source, target, **kwargs)
+            with patch("pubskill_lib.msdmd_writer.os.link", side_effect=competing_write):
+                with self.assertRaises(msdmd_writer.SourceChangedError):
+                    msdmd_writer.write_text_safely(path, "new\n", expected_raw=original)
+            self.assertEqual(concurrent, path.read_bytes())
+            self.assertEqual([original], [p.read_bytes() for p in Path(tmp).glob(".examiner-originals-*/original")])
+
     def test_failed_publication_preserves_source_and_external_hardlinks(self):
+        import os
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "source.py"
             original = b"original\n"
             path.write_bytes(original)
             alias = Path(tmp) / "external.py"
             alias.hardlink_to(path)
-            with patch("pubskill_lib.msdmd_writer.os.replace", side_effect=OSError("publication failed")):
+            link = os.link
+            def fail_candidate(source, target, **kwargs):
+                if Path(source).name == "candidate":
+                    raise OSError("publication failed")
+                return link(source, target, **kwargs)
+            with patch("pubskill_lib.msdmd_writer.os.link", side_effect=fail_candidate):
                 with self.assertRaises(OSError):
                     msdmd_writer.write_text_safely(path, "new\n", expected_raw=original)
             self.assertEqual(original, path.read_bytes())
-            self.assertEqual([], list(Path(tmp).glob(".examiner-*")))
-            msdmd_writer.write_text_safely(path, "new\n", expected_raw=original)
-            self.assertEqual(original, alias.read_bytes())
+            with path.open("r+b") as writer:
+                recovery = msdmd_writer.write_text_safely(path, "new\n", expected_raw=original)
+                writer.write(b"late edit")
+                writer.truncate()
+            self.assertEqual(b"late edit", recovery.read_bytes())
+            self.assertEqual(b"late edit", alias.read_bytes())
             self.assertEqual(b"new\n", path.read_bytes())
 
     def test_apply_preserves_packaged_canonical_parser(self):
@@ -192,6 +219,8 @@ class NarrativeBoundaryTests(unittest.TestCase):
             _, report = examine._apply(root, [ev], [], False)
             self.assertEqual(original, path.read_text(encoding="utf-8"))
             self.assertEqual([], report["changed"])
+            self.assertIn("index.php", report["hmmm"])
+            self.assertEqual(0, examine._plan(root, [ev])["supported_files"])
 
 
     def test_apply_preserves_encoding_and_source_identity(self):
@@ -396,6 +425,27 @@ class PackageScriptTests(unittest.TestCase):
     def test_inspector_endpoint_requires_equals_in_node_24(self):
         # Official Node v24.15.0 attempts to load 9229 as the entry file here.
         self.assertEqual(["9229"], list(audit._local_script_targets("node --inspect 9229 app.js")))
+
+    def test_assignment_prefixes_inspect_options_and_url_paths(self):
+        commands = (
+            "NODE_ENV=production node missing.js",
+            "A='value with spaces' B=two node missing.js",
+            "node inspect --trace-warnings missing.js",
+            "node inspect --require preload.js missing.js",
+            "node inspect --port=9000 --require preload.js missing.js",
+        )
+        for command in commands:
+            self.assertEqual(["missing.js"], list(audit._local_script_targets(command)), command)
+        self.assertEqual([], list(audit._local_script_targets("'A=literal-command' node missing.js")))
+        for operand in ("file:missing%2Fpart.js", "file:missing%5Cpart.js", "file:missing%ZZ.js"):
+            unresolved = []
+            self.assertEqual([], list(audit._local_script_targets("node --entry-url " + operand, unresolved)))
+            self.assertTrue(unresolved)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps({"scripts": {"url": "node https://example.invalid/missing.js"}}))
+            claims = [item["claim"] for item in audit.audit_path(root, "pin")["findings"] if item["surface"] == "deps"]
+            self.assertTrue(any("missing local file https://example.invalid/missing.js" in claim for claim in claims), claims)
 
     def test_node_inspect_subcommand_and_malformed_urls(self):
         self.assertEqual(["missing.js"], list(audit._local_script_targets("node inspect missing.js")))

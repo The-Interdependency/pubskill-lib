@@ -31,14 +31,16 @@ def _canonical_artifact(path: Path) -> bool:
 
 
 def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
-    supported = [ev for ev in evidence_list if ev.marker is not None and not _canonical_artifact(Path(ev.path))]
+    engine = ratios.RatiosEngine()
+    supported = [ev for ev in evidence_list if ev.marker is not None and ev.encoding is not None and engine.adapter_for(Path(ev.path)) is not None and not _canonical_artifact(Path(ev.path))]
     return {
         "root": str(root),
         "files": len(evidence_list),
         "supported_files": len(supported),
         "preserved_authority": [ev.path for ev in evidence_list if _canonical_artifact(Path(ev.path))],
         "unsupported": [
-            {"path": ev.path, "hmmm": ev.hmmm} for ev in evidence_list if ev.marker is None
+            {"path": ev.path, "hmmm": ev.hmmm or ["no safe metrics/write adapter"]}
+            for ev in evidence_list if ev not in supported and not _canonical_artifact(Path(ev.path))
         ],
         "ratios_missing": [ev.path for ev in supported if not ev.ratios_lines],
         "narrative_present": [ev.path for ev in supported if ev.narrative_entries],
@@ -55,6 +57,7 @@ def _apply(
     changed: list[str] = []
     unresolved: dict[str, str] = {}
     preserved_authority: list[str] = []
+    preserved_sources: dict[str, str] = {}
     now = datetime.now(timezone.utc).isoformat()
     engine = ratios.RatiosEngine()
 
@@ -67,6 +70,7 @@ def _apply(
             continue
         adapter = engine.adapter_for(path)
         if ev.marker is None or adapter is None or ev.encoding is None:
+            unresolved[ev.path] = "; ".join(ev.hmmm) or "no safe metrics/write adapter; mutation skipped"
             continue
         try:
             raw = path.read_bytes()
@@ -108,9 +112,10 @@ def _apply(
                 if path.is_symlink() or boundary.assert_inside(root, path) != path or path.read_bytes() != raw:
                     unresolved[ev.path] = "source changed during examination; mutation skipped"
                     continue
-                msdmd_writer.write_text_safely(path, new_text, ev.encoding, expected_raw=raw)
-            except msdmd_writer.SourceChangedError:
-                unresolved[ev.path] = "source changed during examination; mutation skipped"
+                original = msdmd_writer.write_text_safely(path, new_text, ev.encoding, expected_raw=raw)
+                preserved_sources[ev.path] = original.relative_to(root).as_posix()
+            except msdmd_writer.SourceChangedError as exc:
+                unresolved[ev.path] = str(exc)
                 continue
             except OSError as exc:
                 unresolved[ev.path] = f"source unavailable before write; mutation skipped: {exc}"
@@ -122,7 +127,7 @@ def _apply(
             narratives[ev.path] = entry
         changed.extend(file_changes)
 
-    return narratives, {"changed": changed, "narrated": len(narratives), "hmmm": unresolved, "preserved_authority": preserved_authority}
+    return narratives, {"changed": changed, "narrated": len(narratives), "hmmm": unresolved, "preserved_authority": preserved_authority, "preserved_sources": preserved_sources}
 
 
 def main(argv: list[str] | None = None) -> int:
