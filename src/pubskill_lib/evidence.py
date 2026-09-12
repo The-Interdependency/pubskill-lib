@@ -101,7 +101,8 @@ def _decode_source(path: Path, raw: bytes) -> tuple[str | None, str | None, str 
         except (LookupError, SyntaxError, UnicodeDecodeError) as exc:
             return None, None, f"source encoding unresolved: {exc}"
     try:
-        return raw.decode("utf-8"), "utf-8", None
+        encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
+        return raw.decode(encoding), encoding, None
     except UnicodeDecodeError as exc:
         return None, None, f"source encoding unresolved: {exc}"
 
