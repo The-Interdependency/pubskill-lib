@@ -104,11 +104,13 @@ def main() -> None:
         source = temporary / "source"
         source.mkdir()
         archive = subprocess.check_output(["git", "-C", str(root), "archive", commit])
+        if not hasattr(tarfile, "data_filter"):
+            raise SystemExit("release builds require Python with tarfile.data_filter support")
         with tarfile.open(fileobj=io.BytesIO(archive)) as tree:
             for member in tree.getmembers():
                 if member.name.startswith("/") or ".." in Path(member.name).parts or not (member.isfile() or member.isdir()):
                     raise ValueError("unsafe source archive")
-            tree.extractall(source)
+            tree.extractall(source, filter="data")
         environment = dict(os.environ, SOURCE_DATE_EPOCH=str(epoch), PYTHONHASHSEED="0")
         environment.pop("PYTHONPATH", None)
         subprocess.run([sys.executable, "-m", "build", "--no-isolation", "--outdir", str(temporary / "dist"), str(source)], check=True, env=environment)
