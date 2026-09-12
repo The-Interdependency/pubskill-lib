@@ -6,13 +6,14 @@ Clone this repo when you want a command that inspects a local repository and wri
 
 ## Status
 
-The inspect CLI implementation passes the repository gate; the `v0.2.0` release tag is not published yet.
+The inspect CLI version is `0.2.0`. Published versions and their immutable
+artifacts are listed on [GitHub Releases](https://github.com/The-Interdependency/pubskill-lib/releases).
 
 | Claim | State |
 |---|---|
 | Canon | `The-Interdependency/skill-lib` |
 | This repo | distribution + public CLI + fixtures |
-| Clone / run / findings | **implementation ready** — release pending |
+| Clone / run / findings | Source and built-artifact gates described below |
 | VM populate | `HANDOFF.vm.md` |
 | Source pin | `SOURCE.md` |
 
@@ -30,6 +31,36 @@ python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
 ```
 
 Those commands are the definition of done for the first utility tag (`v0.2.0`). They run in GitHub CI from a clean checkout; publish the tag only after the release gate is explicitly completed.
+
+## Reproduce release artifacts
+
+From the release's exact Git commit, install the pinned build tools and build
+into two empty directories:
+
+```bash
+python -m pip install uv==0.11.18
+uv venv --managed-python --python 3.11.15 /tmp/pubskill-build-env
+. /tmp/pubskill-build-env/bin/activate
+uv pip install --python /tmp/pubskill-build-env/bin/python -r requirements-build.txt
+python tools/build_release.py --out /tmp/pubskill-build-a
+python tools/build_release.py --out /tmp/pubskill-build-b
+diff /tmp/pubskill-build-a/SHA256SUMS /tmp/pubskill-build-b/SHA256SUMS
+```
+
+The builder uses only committed source, normalizes source and wheel archive
+headers, ordering, and permissions, and
+requires zlib 1.3.1 at compile time and runtime, and records its identity along
+with source, doctrine, toolchain, and artifact digests in `release-manifest.json`.
+CI compares builds under both 022 and 077 file-creation masks; wheel payloads
+and their RECORD hashes remain unchanged by archive normalization.
+It does not publish. Before publication, install the exact wheel in a fresh venv,
+run the tests and fixture from the extracted sdist, and inspect a real consumer.
+The wheel retains its canonical skill-lib source pin without requiring a checkout.
+
+Download the wheel, source archive, manifest, and `SHA256SUMS` from the chosen
+release. Verify the downloaded files with `sha256sum -c SHA256SUMS`, then install
+the verified wheel with `python -m pip install --no-deps ./pubskill_lib-0.2.0-py3-none-any.whl`.
+Checksums establish byte identity; they are not a signature or a blanket health claim.
 
 ## Inspect CLI
 

@@ -12,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@v7
         with:
@@ -27,3 +28,28 @@ jobs:
           /tmp/pubskill-wheel-venv/bin/python -m pip install --no-deps /tmp/pubskill-wheel/pubskill_lib-*.whl
           cd /tmp
           /tmp/pubskill-wheel-venv/bin/python -c "from pubskill_lib import evidence; assert evidence._comment_markers()['.py'] == '#'"
+      - name: Reproduce release artifacts and replay installed wheel
+        run: |
+          python -m pip install uv==0.11.18
+          uv venv --managed-python --python 3.11.15 /tmp/pubskill-build-venv
+          uv pip install --python /tmp/pubskill-build-venv/bin/python -r requirements-build.txt
+          (
+            umask 022
+            /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-a
+          )
+          (
+            umask 077
+            /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-b
+          )
+          diff /tmp/pubskill-release-a/SHA256SUMS /tmp/pubskill-release-b/SHA256SUMS
+          /tmp/pubskill-wheel-venv/bin/python -m pip install --no-deps --force-reinstall /tmp/pubskill-release-a/*.whl
+          mkdir /tmp/pubskill-replay
+          tar -xzf /tmp/pubskill-release-a/*.tar.gz -C /tmp/pubskill-replay
+          cd /tmp/pubskill-replay/pubskill_lib-0.2.0
+          /tmp/pubskill-wheel-venv/bin/python -m unittest discover -s tests
+          /tmp/pubskill-wheel-venv/bin/python -m pubskill_lib.audit examples/neglected-repo --out /tmp/release-findings.json
+          /tmp/pubskill-wheel-venv/bin/python -c "import json; from pubskill_lib.audit import _read_source_pin; assert json.load(open('/tmp/release-findings.json'))['source_pin'] == _read_source_pin() != 'hmmm'"
+          python -m venv /tmp/pubskill-sdist-venv
+          /tmp/pubskill-sdist-venv/bin/python -m pip install --no-deps /tmp/pubskill-release-a/*.tar.gz
+          /tmp/pubskill-sdist-venv/bin/python -m unittest discover -s tests
+          /tmp/pubskill-sdist-venv/bin/python -c "from pubskill_lib.audit import _read_source_pin; assert _read_source_pin() != 'hmmm'"
