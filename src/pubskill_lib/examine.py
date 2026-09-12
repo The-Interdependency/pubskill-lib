@@ -26,12 +26,17 @@ from . import providers
 from . import ratios
 
 
+def _canonical_artifact(path: Path) -> bool:
+    return path.name == "_msdmd_universal.py" and path.parent.name == "pubskill_lib"
+
+
 def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
-    supported = [ev for ev in evidence_list if ev.marker is not None]
+    supported = [ev for ev in evidence_list if ev.marker is not None and not _canonical_artifact(Path(ev.path))]
     return {
         "root": str(root),
         "files": len(evidence_list),
         "supported_files": len(supported),
+        "preserved_authority": [ev.path for ev in evidence_list if _canonical_artifact(Path(ev.path))],
         "unsupported": [
             {"path": ev.path, "hmmm": ev.hmmm} for ev in evidence_list if ev.marker is None
         ],
@@ -49,6 +54,7 @@ def _apply(
     narratives: dict[str, dict[str, str]] = {}
     changed: list[str] = []
     unresolved: dict[str, str] = {}
+    preserved_authority: list[str] = []
     now = datetime.now(timezone.utc).isoformat()
     engine = ratios.RatiosEngine()
 
@@ -56,6 +62,9 @@ def _apply(
         path = boundary.assert_inside(root, root / ev.path)
         if ev.narrative_entries:
             narratives[ev.path] = ev.narrative_entries[0]
+        if _canonical_artifact(path):
+            preserved_authority.append(ev.path)
+            continue
         adapter = engine.adapter_for(path)
         if ev.marker is None or adapter is None or ev.encoding is None:
             continue
@@ -104,7 +113,7 @@ def _apply(
             narratives[ev.path] = entry
         changed.extend(file_changes)
 
-    return narratives, {"changed": changed, "narrated": len(narratives), "hmmm": unresolved}
+    return narratives, {"changed": changed, "narrated": len(narratives), "hmmm": unresolved, "preserved_authority": preserved_authority}
 
 
 def main(argv: list[str] | None = None) -> int:

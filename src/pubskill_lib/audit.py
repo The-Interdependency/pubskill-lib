@@ -12,6 +12,7 @@ import json
 from importlib.resources import files
 import re
 import shlex
+from urllib.parse import unquote, urlsplit
 import subprocess
 import sys
 from pathlib import Path
@@ -198,6 +199,39 @@ def _check_pyproject_scripts(target, sink):
             )
 
 
+def _shell_segments(command):
+    """Split direct shell commands while retaining quoted/escaped separators."""
+    start, quote, escaped = 0, None, False
+    for index, character in enumerate(command):
+        if escaped:
+            escaped = False
+        elif character == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            if character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+        elif character in ";&|\n":
+            yield command[start:index]
+            start = index + 1
+    yield command[start:]
+
+
+def _entrypoint_target(token, entry_url):
+    if not entry_url:
+        return token
+    try:
+        parsed = urlsplit(token)
+        if parsed.scheme == "file" and parsed.netloc in {"", "localhost"}:
+            return unquote(parsed.path, errors="strict")
+        if not parsed.scheme:
+            return unquote(parsed.path, errors="strict")  # Relative entry URL.
+    except (ValueError, UnicodeError):
+        pass
+    return None
+
+
 def _local_script_targets(command):
     """Yield direct file operands after documented interpreter options.
 
@@ -205,7 +239,7 @@ def _local_script_targets(command):
     Python -W/-X, Bash -o/-O and startup files, and common Node value options
     consume their arguments; attached values and -- delimiters are supported.
     """
-    for segment in re.split(r"\s*(?:&&|;|\|)\s*", command):
+    for segment in _shell_segments(command):
         if not segment.strip():
             continue
         try:
@@ -216,12 +250,19 @@ def _local_script_targets(command):
             continue
         interpreter = tokens[0]
         non_file_modes = NON_FILE_MODES[interpreter]
+        entry_url = False
         index = 1
         while index < len(tokens):
             token = tokens[index]
+            if interpreter == "node" and token in {"--entry-url", "--experimental-entry-url"}:
+                entry_url = True
+                index += 1
+                continue
             if token == "--":
                 if index + 1 < len(tokens) and tokens[index + 1] != "-":
-                    yield tokens[index + 1]
+                    target = _entrypoint_target(tokens[index + 1], entry_url)
+                    if target is not None:
+                        yield target
                 break
             if token == "-" or token.split("=", 1)[0] in non_file_modes:
                 break
@@ -247,7 +288,9 @@ def _local_script_targets(command):
                     break
                 index += 1
                 continue
-            yield token
+            target = _entrypoint_target(token, entry_url)
+            if target is not None:
+                yield target
             break
 
 
