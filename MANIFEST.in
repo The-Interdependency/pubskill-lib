@@ -1,0 +1,7 @@
+include AGENTS.md SOURCE.md HANDOFF.md HANDOFF.vm.md .env.example
+include requirements-build.txt
+graft .agents/skills
+graft examples
+graft tests
+graft tools
+global-exclude __pycache__ *.py[cod]

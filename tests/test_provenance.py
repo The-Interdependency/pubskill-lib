@@ -17,6 +17,10 @@ def _source_pin() -> str:
 
 
 class PublicationProvenanceTests(unittest.TestCase):
+    def test_installed_source_pin_matches_publication_pin(self):
+        from pubskill_lib.audit import _read_source_pin
+        self.assertEqual(_source_pin(), _read_source_pin())
+
     def test_source_pin_matches_vendored_skill_manifest(self):
         vendored = (REPO / ".agents" / "skills" / "README.md").read_text(encoding="utf-8")
         vendored_pin = PIN_RE.search(vendored)
@@ -42,10 +46,10 @@ class PublicationProvenanceTests(unittest.TestCase):
         self.assertIn(".env.*", ignore)
         self.assertIn("*.egg-info/", ignore)
 
-    def test_readme_does_not_claim_unpublished_v020_tag(self):
+    def test_readme_exposes_reproducible_release_gate(self):
         readme = (REPO / "README.md").read_text(encoding="utf-8")
-        self.assertIn("release pending", readme)
-        self.assertNotIn("**shipped** — `v0.2`", readme)
+        self.assertIn("tools/build_release.py", readme)
+        self.assertIn("sha256sum -c SHA256SUMS", readme)
 
 
 if __name__ == "__main__":

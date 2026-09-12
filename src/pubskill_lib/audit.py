@@ -9,6 +9,7 @@ repository defects. It never installs target dependencies or runs target tests.
 
 import argparse
 import json
+from importlib.resources import files
 import re
 import shlex
 import subprocess
@@ -277,10 +278,9 @@ def _check_package_scripts(target, sink):
 
 
 def _read_source_pin():
-    root = Path(__file__).resolve().parents[2]
-    text = _read_text(root / "SOURCE.md") or ""
-    match = PIN_PATTERN.search(text)
-    return match.group(1) if match else "hmmm"
+    """Read the canonical identity shipped with both source and wheel installs."""
+    data = json.loads(files("pubskill_lib").joinpath("_source.json").read_text(encoding="utf-8"))
+    return data["commit"]
 
 
 def audit_path(target_path, source_pin=None):
