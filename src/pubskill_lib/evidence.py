@@ -18,6 +18,7 @@ from pathlib import Path
 
 from . import _msdmd_universal as _canonical_msdmd
 from . import boundary
+from . import ratios, source_boundaries
 
 SHEBANG_RE = re.compile(r"^#!.*$")
 _RATIOS_LINE_RE = re.compile(r"^(?:#|//|--|%|;|!|'|\*>)\s*ratios:\s*(.+?)\s*$")
@@ -35,7 +36,7 @@ def _comment_markers() -> dict[str, str]:
     return dict(markers) if isinstance(markers, dict) else {}
 
 
-def source_text(text: str, marker: str | None) -> str:
+def source_text(text: str, marker: str | None, path: Path | None = None) -> str:
     """Return source text with complete generated NARRATIVE/RATIOS metadata removed.
 
     Trailing blank lines are normalized because RATIOS placement already removes
@@ -44,24 +45,11 @@ def source_text(text: str, marker: str | None) -> str:
     if marker is None:
         return text
 
-    start = f"{marker} === NARRATIVE ==="
-    end = f"{marker} === END NARRATIVE ==="
     lines = text.splitlines()
-    kept: list[str] = []
-    index = 0
-
-    while index < len(lines):
-        raw = lines[index]
-        if raw.rstrip() == start:
-            close = index + 1
-            while close < len(lines) and lines[close].rstrip() != end:
-                close += 1
-            if close < len(lines):
-                index = close + 1
-                continue
-        if not _RATIOS_LINE_RE.match(raw.rstrip()):
-            kept.append(raw)
-        index += 1
+    adapter = ratios.default_adapter_for(path) if path is not None else None
+    bookends, narrative = source_boundaries.metadata_indices(lines, marker, adapter)
+    excluded = bookends | narrative
+    kept = [line for index, line in enumerate(lines) if index not in excluded]
 
     while kept and not kept[-1].strip():
         kept.pop()
@@ -134,7 +122,7 @@ def read_evidence(root: Path, path: Path) -> FileEvidence:
         item.hmmm.append("metadata-excluding source hash unavailable; mutation disabled")
         return item
 
-    stable_encoded = source_text(text, marker).encode("utf-8")
+    stable_encoded = source_text(text, marker, path).encode("utf-8")
     item.sha256 = hashlib.sha256(stable_encoded).hexdigest()
 
     first_line = text.splitlines()[0].rstrip() if text.splitlines() else ""
@@ -142,12 +130,13 @@ def read_evidence(root: Path, path: Path) -> FileEvidence:
         item.shebang = first_line
 
     if marker is not None:
-        for raw_line in text.splitlines():
-            if _RATIOS_LINE_RE.match(raw_line.rstrip()):
-                item.ratios_lines.append(raw_line.rstrip())
+        lines = text.splitlines()
+        bookends, narrative_indices = source_boundaries.metadata_indices(lines, marker, ratios.default_adapter_for(path))
+        item.ratios_lines = [lines[index].rstrip() for index in sorted(bookends)]
         parser = _msdmd_parser()
         for name in _block_names(text, marker):
-            entries = parser.parse_text(text, name, marker)
+            block_text = "\n".join(lines[index] for index in sorted(narrative_indices)) if name == "NARRATIVE" else text
+            entries = parser.parse_text(block_text, name, marker)
             item.msdmd_blocks[name] = entries
         item.narrative_entries = item.msdmd_blocks.get("NARRATIVE", [])
     else:

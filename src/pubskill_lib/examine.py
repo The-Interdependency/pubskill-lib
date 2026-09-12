@@ -84,7 +84,7 @@ def _apply(
         if narrate:
             result = narrative.narrate_file(
                 ev,
-                evidence.source_text(original_text, ev.marker),
+                evidence.source_text(original_text, ev.marker, path),
                 provider_list,
                 now,
             )
@@ -98,14 +98,23 @@ def _apply(
             if block_changed:
                 file_changes.append(f"{ev.path}:narrative")
 
-        values = engine.compute(path, evidence.source_text(new_text, ev.marker))
+        values = engine.compute(path, evidence.source_text(new_text, ev.marker, path))
         new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
         if ratio_changed:
             file_changes.append(f"{ev.path}:ratios")
 
         if new_text != original_text:
             try:
-                msdmd_writer.write_text_safely(path, new_text, ev.encoding)
+                if path.is_symlink() or boundary.assert_inside(root, path) != path or path.read_bytes() != raw:
+                    unresolved[ev.path] = "source changed during examination; mutation skipped"
+                    continue
+                msdmd_writer.write_text_safely(path, new_text, ev.encoding, expected_raw=raw)
+            except msdmd_writer.SourceChangedError:
+                unresolved[ev.path] = "source changed during examination; mutation skipped"
+                continue
+            except OSError as exc:
+                unresolved[ev.path] = f"source unavailable before write; mutation skipped: {exc}"
+                continue
             except UnicodeEncodeError:
                 unresolved[ev.path] = f"generated text cannot use {ev.encoding}; mutation skipped"
                 continue
