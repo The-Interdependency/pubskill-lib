@@ -31,12 +31,20 @@ MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 PIN_PATTERN = re.compile(r"`([0-9a-f]{40})`")
 LOCAL_SCRIPT_INTERPRETERS = {"node", "python", "python3", "bash", "sh"}
 NON_FILE_MODES = {
-    "node": {"-e", "--eval", "-p", "--print", "--run"},
-    "python": {"-c", "-m"},
-    "python3": {"-c", "-m"},
-    "bash": {"-c"},
-    "sh": {"-c"},
+    "node": {"-e", "--eval", "-p", "--print", "--run", "-h", "--help", "-v", "--version", "--v8-options", "--completion-bash"},
+    "python": {"-c", "-m", "-h", "-?", "--help", "-V", "--version", "--help-env", "--help-xoptions", "--help-all"},
+    "python3": {"-c", "-m", "-h", "-?", "--help", "-V", "--version", "--help-env", "--help-xoptions", "--help-all"},
+    "bash": {"-c", "--help", "--version"},
+    "sh": {"-c", "--help", "--version"},
 }
+BOOLEAN_OPTIONS = {
+    "node": {"--trace-warnings", "--inspect", "--inspect-brk", "--inspect-wait", "--watch", "--test", "--no-warnings", "--enable-source-maps", "--experimental-strip-types", "--experimental-transform-types", "--abort-on-uncaught-exception", "--check", "--interactive", "-c", "-i"},
+    "python": {"-" + character for character in "bBdEiIOPqRsSuvx"},
+    "python3": {"-" + character for character in "bBdEiIOPqRsSuvx"},
+    "bash": {"-" + character for character in "abefhkmnptuvxBCEHPTlirs"} | {"+" + character for character in "abefhkmnptuvxBCEHPTlirs"} | {"--debugger", "--dump-po-strings", "--dump-strings", "--noprofile", "--norc", "--posix", "--restricted", "--verbose", "--login"},
+    "sh": {"-" + character for character in "aefnuvxCImps"} | {"+" + character for character in "aefnuvxCImps"},
+}
+
 VALUE_OPTIONS = {
     "python": {"-W", "-X", "--check-hash-based-pycs"},
     "python3": {"-W", "-X", "--check-hash-based-pycs"},
@@ -201,8 +209,13 @@ def _check_pyproject_scripts(target, sink):
 
 def _shell_segments(command, separators=";&|\n"):
     """Split direct shell commands while retaining quoted/escaped separators."""
-    start, quote, escaped = 0, None, False
+    start, quote, escaped, comment = 0, None, False, False
     for index, character in enumerate(command):
+        if comment:
+            if character == "\n":
+                comment = False
+                start = index + 1
+            continue
         if escaped:
             escaped = False
         elif character == "\\" and quote != "'":
@@ -212,10 +225,14 @@ def _shell_segments(command, separators=";&|\n"):
                 quote = None
         elif character in {"'", '"'}:
             quote = character
+        elif character == "#" and (index == 0 or command[index - 1] in " \t\r\n;&|()"):
+            yield command[start:index]
+            comment = True
         elif character in separators:
             yield command[start:index]
             start = index + 1
-    yield command[start:]
+    if not comment:
+        yield command[start:]
 
 
 def _entrypoint_target(token, entry_url, unresolved=None):
@@ -246,20 +263,36 @@ def _local_script_targets(command, unresolved=None):
     Python -W/-X, Bash -o/-O and startup files, and common Node value options
     consume their arguments; attached values and -- delimiters are supported.
     """
+    cwd_unknown = False
     for segment in _shell_segments(command):
         if not segment.strip():
             continue
         try:
             tokens = shlex.split(segment)
-        except ValueError:
+        except ValueError as error:
+            if unresolved is not None:
+                unresolved.append(f"unparseable package script: {error}")
             continue
         raw_words = [word for word in _shell_segments(segment, " \t\r") if word]
         while tokens and raw_words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", raw_words[0]):
             tokens.pop(0)
             raw_words.pop(0)
-        if not tokens or tokens[0] not in LOCAL_SCRIPT_INTERPRETERS:
+        if not tokens:
             continue
-        interpreter = tokens[0]
+        interpreter = Path(tokens[0]).name
+        if interpreter in {"cd", "pushd", "popd"}:
+            cwd_unknown = True
+            if unresolved is not None:
+                unresolved.append("working-directory change is outside direct-script audit scope")
+            continue
+        if interpreter not in LOCAL_SCRIPT_INTERPRETERS:
+            if unresolved is not None:
+                unresolved.append(f"command is outside direct interpreter audit scope: {tokens[0]!r}")
+            continue
+        if cwd_unknown:
+            if unresolved is not None:
+                unresolved.append(f"script target after working-directory change is unresolved: {segment.strip()!r}")
+            continue
         non_file_modes = NON_FILE_MODES[interpreter]
         entry_url = False
         inspecting = False
@@ -288,6 +321,12 @@ def _local_script_targets(command, unresolved=None):
                 index += 2
                 continue
             if token.startswith("-") or (interpreter in {"bash", "sh"} and token.startswith("+")):
+                if token.startswith("--"):
+                    option = token.split("=", 1)[0]
+                    if option not in BOOLEAN_OPTIONS[interpreter] and option not in VALUE_OPTIONS[interpreter] and not (inspecting and re.fullmatch(r"--port=\d+", token)):
+                        if unresolved is not None:
+                            unresolved.append(f"interpreter option arity is unresolved: {token!r}")
+                        break
                 # Short options may be clustered or carry an attached argument.
                 non_file = False
                 if not token.startswith("--"):
@@ -301,6 +340,11 @@ def _local_script_targets(command, unresolved=None):
                         if token[0] + option in VALUE_OPTIONS[interpreter]:
                             if position == len(token) - 1:
                                 index += 1
+                            break
+                        if token[0] + option not in BOOLEAN_OPTIONS[interpreter]:
+                            if unresolved is not None:
+                                unresolved.append(f"interpreter option arity is unresolved: {token!r}")
+                            non_file = True
                             break
                 if non_file:
                     break
