@@ -86,6 +86,12 @@ def write_text_safely(path: Path, new_text: str, encoding: str = "utf-8", *, exp
     candidate.chmod(mode)
     moved = False
     try:
+        # Both candidate publication and original restoration require links.
+        # Probe the same files/directory before withdrawing the live name.
+        for source in (candidate, path):
+            probe = recovery / "link-probe"
+            os.link(source, probe, follow_symlinks=False)
+            probe.unlink()
         if path.is_symlink() or path.read_bytes() != raw:
             raise SourceChangedError("source changed before metadata publication")
         os.rename(path, original)
@@ -112,5 +118,6 @@ def write_text_safely(path: Path, new_text: str, encoding: str = "utf-8", *, exp
         raise
     finally:
         candidate.unlink(missing_ok=True)
+        (recovery / "link-probe").unlink(missing_ok=True)
         if not moved:
             recovery.rmdir()

@@ -101,7 +101,7 @@ class NarrativeBoundaryTests(unittest.TestCase):
             path.write_bytes(original)
             link = os.link
             def competing_write(source, target, **kwargs):
-                if Path(source).name == "candidate":
+                if Path(source).name == "candidate" and Path(target) == path:
                     path.write_bytes(concurrent)
                 return link(source, target, **kwargs)
             with patch("pubskill_lib.msdmd_writer.os.link", side_effect=competing_write):
@@ -120,7 +120,7 @@ class NarrativeBoundaryTests(unittest.TestCase):
             alias.hardlink_to(path)
             link = os.link
             def fail_candidate(source, target, **kwargs):
-                if Path(source).name == "candidate":
+                if Path(source).name == "candidate" and Path(target) == path:
                     raise OSError("publication failed")
                 return link(source, target, **kwargs)
             with patch("pubskill_lib.msdmd_writer.os.link", side_effect=fail_candidate):
@@ -223,30 +223,35 @@ class NarrativeBoundaryTests(unittest.TestCase):
             self.assertEqual(0, examine._plan(root, [ev])["supported_files"])
 
 
-    def test_apply_preserves_encoding_and_source_identity(self):
-        class FakeProvider:
-            name, model = "fake", "model-1"
-            def chat(self, system, user):
-                assert "café" in user
-                return "Prints café."
-
-        for encoding in ("latin-1", "utf-8-sig"):
+    def test_encoding_prologues_stay_intact_when_canonical_placement_cannot_close(self):
+        for encoding, prefix in (("latin-1", "# coding: latin-1\n"), ("utf-8-sig", "#!/usr/bin/env python3\n# coding: utf-8\n")):
             with self.subTest(encoding=encoding), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 path = root / "tool.py"
-                text = "# coding: " + ("utf-8" if encoding == "utf-8-sig" else encoding) + "\nprint('café')\n"
-                path.write_bytes(text.encode(encoding))
+                raw = (prefix + "print('café')\n").encode(encoding)
+                path.write_bytes(raw)
                 before = evidence.read_evidence(root, path)
-                examine._apply(root, [before], [FakeProvider()], True)
-                after = evidence.read_evidence(root, path)
-                self.assertEqual(before.sha256, after.sha256)
-                self.assertFalse(narrative.is_stale(after.narrative_entries[0], after.sha256))
-                self.assertIn("café", path.read_bytes().decode(encoding))
-                compile(path.read_bytes(), str(path), "exec")
-                first = path.read_bytes()
-                _, report = examine._apply(root, [after], [], False)
-                self.assertEqual(first, path.read_bytes())
+                _, report = examine._apply(root, [before], [], False)
+                self.assertEqual(raw, path.read_bytes())
                 self.assertEqual([], report["changed"])
+                self.assertIn("canonical RATIOS", report["hmmm"]["tool.py"])
+                self.assertEqual(0, examine._plan(root, [before])["supported_files"])
+                compile(path.read_bytes(), str(path), "exec")
+                # Encoding fidelity remains independently checked at the writer.
+                msdmd_writer.write_text_safely(path, prefix + "print('café updated')\n", encoding, expected_raw=raw)
+                compile(path.read_bytes(), str(path), "exec")
+                self.assertIn("café updated", path.read_bytes().decode(encoding))
+
+    def test_missing_hardlink_support_never_withdraws_live_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "source.py"
+            original = b"original\n"
+            path.write_bytes(original)
+            with patch("pubskill_lib.msdmd_writer.os.link", side_effect=OSError("unsupported")):
+                with self.assertRaises(OSError):
+                    msdmd_writer.write_text_safely(path, "new\n", expected_raw=original)
+            self.assertEqual(original, path.read_bytes())
+            self.assertEqual([], list(Path(tmp).glob(".examiner-originals-*")))
 
     def test_unrepresentable_narrative_does_not_truncate_source(self):
         class FakeProvider:

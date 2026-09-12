@@ -19,7 +19,6 @@ class ExaminerIdempotenceTests(unittest.TestCase):
             source = root / "tool.py"
             source.write_text(
                 "#!/usr/bin/env python3\n"
-                "# -*- coding: utf-8 -*-\n"
                 "print('hi')\n",
                 encoding="utf-8",
             )
@@ -28,6 +27,7 @@ class ExaminerIdempotenceTests(unittest.TestCase):
             _, first_report = examine._apply(root, first_evidence, [FakeProvider()], True)
             first_output = source.read_text(encoding="utf-8")
             self.assertTrue(first_report["changed"])
+            self.assertEqual((True, True), evidence._canonical_msdmd.ratios_placement(first_output))
 
             second_evidence = evidence.inventory(root)
             self.assertEqual(1, len(second_evidence))

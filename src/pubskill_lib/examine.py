@@ -32,16 +32,30 @@ def _canonical_artifact(path: Path) -> bool:
 
 def _plan(root: Path, evidence_list: list[evidence.FileEvidence]) -> dict:
     engine = ratios.RatiosEngine()
-    supported = [ev for ev in evidence_list if ev.marker is not None and ev.encoding is not None and engine.adapter_for(Path(ev.path)) is not None and not _canonical_artifact(Path(ev.path))]
+    supported = []
+    unsupported = []
+    for ev in evidence_list:
+        if _canonical_artifact(Path(ev.path)):
+            continue
+        reason = "; ".join(ev.hmmm)
+        if ev.marker is None or ev.encoding is None or engine.adapter_for(Path(ev.path)) is None:
+            reason = reason or "no safe metrics/write adapter"
+        else:
+            try:
+                path = boundary.assert_inside(root, root / ev.path)
+                engine.place(path.read_bytes().decode(ev.encoding), ev.marker, {}, path)
+            except (OSError, UnicodeError, ratios.UnsupportedPlacementError) as error:
+                reason = str(error)
+            else:
+                supported.append(ev)
+                continue
+        unsupported.append({"path": ev.path, "hmmm": [reason]})
     return {
         "root": str(root),
         "files": len(evidence_list),
         "supported_files": len(supported),
         "preserved_authority": [ev.path for ev in evidence_list if _canonical_artifact(Path(ev.path))],
-        "unsupported": [
-            {"path": ev.path, "hmmm": ev.hmmm or ["no safe metrics/write adapter"]}
-            for ev in evidence_list if ev not in supported and not _canonical_artifact(Path(ev.path))
-        ],
+        "unsupported": unsupported,
         "ratios_missing": [ev.path for ev in supported if not ev.ratios_lines],
         "narrative_present": [ev.path for ev in supported if ev.narrative_entries],
     }
@@ -82,6 +96,11 @@ def _apply(
             unresolved[ev.path] = f"source unavailable; mutation skipped: {exc}"
             continue
 
+        try:
+            engine.place(original_text, ev.marker, {}, path)
+        except ratios.UnsupportedPlacementError as error:
+            unresolved[ev.path] = str(error)
+            continue
         new_text = original_text
         file_changes: list[str] = []
         entry = narratives.get(ev.path)
@@ -103,7 +122,11 @@ def _apply(
                 file_changes.append(f"{ev.path}:narrative")
 
         values = engine.compute(path, evidence.source_text(new_text, ev.marker, path))
-        new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
+        try:
+            new_text, ratio_changed = engine.place(new_text, ev.marker, values, path)
+        except ratios.UnsupportedPlacementError as error:
+            unresolved[ev.path] = str(error)
+            continue
         if ratio_changed:
             file_changes.append(f"{ev.path}:ratios")
 
@@ -171,11 +194,13 @@ def main(argv: list[str] | None = None) -> int:
     volume = assemble.assemble_docs(root, evidence_list, narratives, out_dir)
 
     if args.json:
-        print(json.dumps({"changed": report["changed"], "hmmm": report["hmmm"], "volume": str(volume)}, indent=2))
+        print(json.dumps({**report, "volume": str(volume)}, indent=2))
     else:
         print(f"applied: {len(report['changed'])} writes")
         for change in report["changed"]:
             print(f"  {change}")
+        for path, original in report["preserved_sources"].items():
+            print(f"  preserved source: {path}: {original}")
         for path, reason in report["hmmm"].items():
             print(f"  hmmm: {path}: {reason}")
         print(f"assembled: {volume}")
