@@ -47,6 +47,20 @@ class CredentialBoundaryTests(unittest.TestCase):
 
 
 class NarrativeBoundaryTests(unittest.TestCase):
+    def test_apply_preserves_packaged_canonical_parser(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            parser = root / "src/pubskill_lib/_msdmd_universal.py"
+            parser.parent.mkdir(parents=True)
+            original = Path(evidence._canonical_msdmd.__file__).read_bytes()
+            parser.write_bytes(original)
+            ev = evidence.read_evidence(root, parser)
+            _, report = examine._apply(root, [ev], [], True)
+            self.assertEqual(original, parser.read_bytes())
+            self.assertEqual([], report["changed"])
+            self.assertEqual([ev.path], report["preserved_authority"])
+            self.assertEqual(0, examine._plan(root, [ev])["supported_files"])
+
     def test_narrative_preserves_python_shebang_and_encoding_header(self):
         text = (
             "#!/usr/bin/env python3\n"
@@ -302,6 +316,11 @@ class PackageScriptTests(unittest.TestCase):
             "node --test-rerun-failures failures.json app.py",
             "node --test-random-seed 12 app.py",
             "node --max-semi-space-size 16 app.py",
+            "node --test-name-pattern 'unit|integration' app.py",
+            "node --test-name-pattern 'unit;integration' app.py",
+            "node --test-name-pattern '|' app.py",
+            "node --test-name-pattern unit\\|integration app.py",
+            "node --inspect=9229 app.py", "node --inspect app.py",
             "bash -o errexit app.py", "bash -O extglob app.py",
             "bash --rcfile startup.sh app.py", "bash -eo pipefail app.py",
             "sh +o errexit app.py", "python -- app.py",
@@ -312,6 +331,27 @@ class PackageScriptTests(unittest.TestCase):
         for command in ("python -W ignore -c pass", "python -mhttp.server", "node --eval=1", "bash -ec 'echo ok'", "sh -s arg", "python - arg", "node -r preload.js -e 1", "python -W"):
             with self.subTest(command=command):
                 self.assertEqual([], list(audit._local_script_targets(command)))
+
+    def test_inspector_endpoint_requires_equals_in_node_24(self):
+        # Official Node v24.15.0 attempts to load 9229 as the entry file here.
+        self.assertEqual(["9229"], list(audit._local_script_targets("node --inspect 9229 app.js")))
+
+    def test_quoted_segments_and_entrypoint_urls(self):
+        self.assertEqual(["first.js", "second.js"], list(audit._local_script_targets("node --test-name-pattern 'a|b' first.js && node second.js")))
+        self.assertEqual([], list(audit._local_script_targets("node --entry-url 'data:text/javascript,console.log(1);'")))
+        self.assertEqual(["/definitely/missing file.js"], list(audit._local_script_targets("node --entry-url file:///definitely/missing%20file.js")))
+        self.assertEqual(["./local file.js"], list(audit._local_script_targets("node --entry-url './local%20file.js?debug=1#part'")))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps({"scripts": {
+                "file": "node --entry-url file:///definitely/missing.js",
+                "data": "node --entry-url 'data:text/javascript,console.log(1);'",
+                "quoted": "node --test-name-pattern 'unit|integration' missing.js",
+            }}))
+            claims = [f["claim"] for f in audit.audit_path(root, "pin")["findings"] if f["surface"] == "deps"]
+            self.assertEqual(2, len(claims))
+            self.assertTrue(any("escapes repository via /definitely/missing.js" in claim for claim in claims))
+            self.assertTrue(any("missing local file missing.js" in claim for claim in claims))
 
     def test_non_object_package_manifest_is_target_defect(self):
         with tempfile.TemporaryDirectory() as tmp:
