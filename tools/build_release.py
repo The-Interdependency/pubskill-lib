@@ -7,8 +7,10 @@
 #   public_surface: python tools/build_release.py --out DIRECTORY
 #   internal_surface: normalize_sdist, main
 #   auth_boundary: none
-#   storage_boundary: temporary build directory and explicit output directory
-#   network_boundary: none; build dependencies must already be installed
+#   storage_boundary: write
+#   storage_notes: temporary build directory and explicit output directory
+#   network_boundary: none
+#   network_notes: build dependencies must already be installed
 #   user_data_boundary: none
 #   admin_only: false
 #   tests: clean-install repository suite and two-build digest comparison documented in README
