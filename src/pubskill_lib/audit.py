@@ -256,8 +256,8 @@ def _shell_context_gap(segment, *, context_only=False):
             return "shell control syntax is outside literal-path audit scope"
         elif not context_only and (character in "$`" or (quote is None and
                 (character in "*?[]" or (character == "~" and (index == word_start or
-                 (re.match(r"[A-Za-z_][A-Za-z0-9_]*=", segment[word_start:index])
-                  and segment[index - 1] in "=:")))))):
+                 (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=", segment[word_start:index])
+                  or (segment[index - 1] == ":" and re.match(r"[A-Za-z_][A-Za-z0-9_]*=", segment[word_start:index])))))))):
             return "shell word expansion is outside literal-path audit scope"
         elif quote:
             if character == quote:

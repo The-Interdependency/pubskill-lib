@@ -606,6 +606,7 @@ class PackageScriptTests(unittest.TestCase):
         for command, expected in (
             ('node foo=~/bar', []),
             ('node foo=prefix:~/bar', []),
+            ('node entry=value=~/missing.js', ["entry=value=~/missing.js"]),
             ('node foo-bar=~/bar', ["foo-bar=~/bar"]),
             ('node build~backup.js', ["build~backup.js"]),
         ):
