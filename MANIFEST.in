@@ -1,4 +1,5 @@
 include AGENTS.md SOURCE.md HANDOFF.md HANDOFF.vm.md .env.example
+include .gitignore
 include requirements-build.txt
 graft .agents/skills
 graft examples

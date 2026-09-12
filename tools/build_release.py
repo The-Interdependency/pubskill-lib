@@ -110,6 +110,7 @@ def main() -> None:
     manifest = {"schema": "pubskill-lib.release-manifest", "version": 1, "source_commit": commit, "source_tree": git("rev-parse", "HEAD^{tree}"), "source_date_epoch": epoch, "skill_lib_commit": doctrine["commit"], "build_toolchain": versions, "artifacts_sha256": hashes}
     receipt = out / "release-manifest.json"
     receipt.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    hashes = dict(hashes)
     hashes[receipt.name] = hashlib.sha256(receipt.read_bytes()).hexdigest()
     (out / "SHA256SUMS").write_text("".join(f"{digest}  {name}\n" for name, digest in sorted(hashes.items())))
     print(json.dumps(manifest, indent=2))

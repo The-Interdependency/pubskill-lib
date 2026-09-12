@@ -27,3 +27,17 @@ jobs:
           /tmp/pubskill-wheel-venv/bin/python -m pip install --no-deps /tmp/pubskill-wheel/pubskill_lib-*.whl
           cd /tmp
           /tmp/pubskill-wheel-venv/bin/python -c "from pubskill_lib import evidence; assert evidence._comment_markers()['.py'] == '#'"
+      - name: Reproduce release artifacts and replay installed wheel
+        run: |
+          python -m venv /tmp/pubskill-build-venv
+          /tmp/pubskill-build-venv/bin/python -m pip install -r requirements-build.txt
+          /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-a
+          /tmp/pubskill-build-venv/bin/python tools/build_release.py --out /tmp/pubskill-release-b
+          diff /tmp/pubskill-release-a/SHA256SUMS /tmp/pubskill-release-b/SHA256SUMS
+          /tmp/pubskill-wheel-venv/bin/python -m pip install --no-deps --force-reinstall /tmp/pubskill-release-a/*.whl
+          mkdir /tmp/pubskill-replay
+          tar -xzf /tmp/pubskill-release-a/*.tar.gz -C /tmp/pubskill-replay
+          cd /tmp/pubskill-replay/pubskill_lib-0.2.0
+          /tmp/pubskill-wheel-venv/bin/python -m unittest discover -s tests
+          /tmp/pubskill-wheel-venv/bin/python -m pubskill_lib.audit examples/neglected-repo --out /tmp/release-findings.json
+          /tmp/pubskill-wheel-venv/bin/python -c "import json; from pubskill_lib.audit import _read_source_pin; assert json.load(open('/tmp/release-findings.json'))['source_pin'] == _read_source_pin() != 'hmmm'"
