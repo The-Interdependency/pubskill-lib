@@ -236,12 +236,15 @@ def _shell_segments(command, separators=";&|\n"):
 
 def _shell_context_gap(segment, *, context_only=False):
     """Identify unsupported syntax, separating word expansion from shell structure."""
-    quote, escaped = None, False
+    quote, escaped, word_start = None, False, 0
     for index, character in enumerate(segment):
         if escaped:
             if character == "\n":
                 return "shell line continuation is outside literal-path audit scope"
             escaped = False
+            continue
+        if quote is None and character.isspace():
+            word_start = index + 1
             continue
         if character == "\\" and quote != "'":
             escaped = True
@@ -251,7 +254,9 @@ def _shell_context_gap(segment, *, context_only=False):
         elif quote is None and (character in "`{}()<>" or segment[index:index + 2] == "$("):
             return "shell control syntax is outside literal-path audit scope"
         elif not context_only and (character in "$`" or (quote is None and
-                (character in "*?[]" or (character == "~" and (index == 0 or segment[index - 1].isspace()))))):
+                (character in "*?[]" or (character == "~" and (index == word_start or
+                 (re.match(r"[A-Za-z_][A-Za-z0-9_]*=", segment[word_start:index])
+                  and segment[index - 1] in "=:")))))):
             return "shell word expansion is outside literal-path audit scope"
         elif quote:
             if character == quote:
@@ -259,6 +264,50 @@ def _shell_context_gap(segment, *, context_only=False):
         elif character in {"'", '"'}:
             quote = character
     return None
+
+
+def _fixed_word_arity(raw):
+    """Bounded proof that a supported option value remains one shell argument."""
+    quote, escaped = None, False
+    for index, character in enumerate(raw):
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote != "'":
+            escaped = True
+        elif quote == "'":
+            if character == "'":
+                quote = None
+        elif quote == '"':
+            if character == '"':
+                quote = None
+            elif character == "$":
+                # Ordinary quoted scalar expansions have fixed arity. Positional
+                # arrays and complex parameter/substitution forms stay unresolved.
+                tail = raw[index:]
+                if not re.match(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9*#?$!]|\{[A-Za-z_][A-Za-z0-9_]*\})", tail):
+                    return False
+            elif character == "`":
+                return False
+        elif character in {"'", '"'}:
+            quote = character
+        elif character in "$`*?[]{}()<>" or character.isspace():
+            return False
+    return quote is None and not escaped
+
+
+def _attached_option_value(token, interpreter):
+    if token.startswith("--"):
+        return "=" in token and token.split("=", 1)[0] in VALUE_OPTIONS[interpreter]
+    if not token.startswith(("-", "+")):
+        return False
+    for position, character in enumerate(token[1:], start=1):
+        option = token[0] + character
+        if option in VALUE_OPTIONS[interpreter]:
+            return position < len(token) - 1
+        if option not in BOOLEAN_OPTIONS[interpreter]:
+            return False
+    return False
 
 
 def _entrypoint_target(token, entry_url, unresolved=None):
@@ -334,9 +383,10 @@ def _local_script_targets(command, unresolved=None):
         inspecting = False
         index = 1
         while index < len(tokens):
-            if _shell_context_gap(" ".join(raw_words[:index + 1])):
-                break
             token = tokens[index]
+            if _shell_context_gap(raw_words[index]):
+                if not _attached_option_value(token, interpreter) or not _fixed_word_arity(raw_words[index]):
+                    break
             if interpreter == "node" and token == "inspect" and not inspecting:
                 inspecting = True
                 index += 1
@@ -349,7 +399,7 @@ def _local_script_targets(command, unresolved=None):
                 continue
             if token == "--":
                 if (index + 1 < len(tokens) and tokens[index + 1] != "-"
-                        and not _shell_context_gap(" ".join(raw_words[:index + 2]))):
+                        and not _shell_context_gap(raw_words[index + 1])):
                     target = _entrypoint_target(tokens[index + 1], entry_url, unresolved)
                     if target is not None:
                         yield target
@@ -357,6 +407,8 @@ def _local_script_targets(command, unresolved=None):
             if token == "-" or token.split("=", 1)[0] in non_file_modes:
                 break
             if token in VALUE_OPTIONS[interpreter]:
+                if index + 1 < len(raw_words) and not _fixed_word_arity(raw_words[index + 1]):
+                    break
                 index += 2
                 continue
             if token.startswith("-") or (interpreter in {"bash", "sh"} and token.startswith("+")):
@@ -373,11 +425,13 @@ def _local_script_targets(command, unresolved=None):
                     if interpreter in {"bash", "sh"}:
                         modes.add("s")  # Read commands from stdin.
                     for position, option in enumerate(token[1:], start=1):
-                        if token[0] == "-" and option in modes:
+                        if (token[0] == "-" and option in modes) or (interpreter == "bash" and option == "s"):
                             non_file = True
                             break
                         if token[0] + option in VALUE_OPTIONS[interpreter]:
                             if position == len(token) - 1:
+                                if index + 1 < len(raw_words) and not _fixed_word_arity(raw_words[index + 1]):
+                                    non_file = True
                                 index += 1
                             break
                         if token[0] + option not in BOOLEAN_OPTIONS[interpreter]:
@@ -416,7 +470,6 @@ def _check_package_scripts(target, sink, unresolved):
             continue
         script_unresolved = []
         for raw_path in _local_script_targets(command, script_unresolved):
-            raw_path = raw_path.strip('"\'')
             try:
                 candidate = Path(raw_path)
                 local = candidate.resolve() if candidate.is_absolute() else (target / candidate).resolve()

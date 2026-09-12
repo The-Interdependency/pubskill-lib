@@ -379,6 +379,24 @@ class CanonicalMarkerTests(unittest.TestCase):
             self.assertEqual("#", item.marker)
             self.assertFalse(item.hmmm)
 
+    def test_unencodable_stable_source_hash_is_hmmm_without_mutation(self):
+        from contextlib import redirect_stdout
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "surrogate.py"
+            raw = b"# coding: unicode_escape\n# " + bytes((92,)) + b"ud800\n"
+            path.write_bytes(raw)
+            item = evidence.read_evidence(root, path)
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), item.sha256)
+            self.assertIsNone(item.encoding)
+            self.assertIsNone(item.marker)
+            self.assertTrue(any("encoding unresolved while hashing" in text for text in item.hmmm))
+            for options in ([], ["--apply"]):
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(0, examine.main(["--repo", str(root), "--json", *options]))
+                self.assertEqual(raw, path.read_bytes())
+
     def test_undecodable_non_python_source_is_hmmm_and_not_mutable(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -567,6 +585,41 @@ class PackageScriptTests(unittest.TestCase):
                 self.assertEqual(list(audit._local_script_targets(command, gaps)), expected)
                 if "$" in command or "*" in command or "~/" in command:
                     self.assertTrue(gaps)
+
+    def test_fixed_arity_option_values_and_bash_stdin_modes(self):
+        for command, expected in (
+            ('node --require "$PRELOAD" missing.js', ["missing.js"]),
+            ('node --require="$PRELOAD" missing.js', ["missing.js"]),
+            ('node -r"$PRELOAD" missing.js', ["missing.js"]),
+            ('python -W "$WARN" missing.py', ["missing.py"]),
+            ('python -uW"$WARN" missing.py', ["missing.py"]),
+            ('python -uW "$WARN" missing.py', ["missing.py"]),
+            ('node --require "$@" uncertain.js', []),
+            ('node --require $PRELOAD uncertain.js', []),
+            ('bash +s missing.sh', []),
+            ('bash +es missing.sh', []),
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(expected, list(audit._local_script_targets(command)))
+
+    def test_assignment_tildes_and_literal_filename_quotes(self):
+        for command, expected in (
+            ('node foo=~/bar', []),
+            ('node foo=prefix:~/bar', []),
+            ('node foo-bar=~/bar', ["foo-bar=~/bar"]),
+            ('node build~backup.js', ["build~backup.js"]),
+        ):
+            gaps = []
+            self.assertEqual(expected, list(audit._local_script_targets(command, gaps)), command)
+            self.assertEqual(not expected, bool(gaps), command)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "present.js").write_text("// ordinary name exists\n")
+            (root / "package.json").write_text(json.dumps({"scripts": {"quoted": "node " + "'" + '\"present.js\"' + "'"}}))
+            claims = [finding["claim"] for finding in audit.audit_path(root, "pin")["findings"]]
+            self.assertTrue(any('missing local file "present.js"' in claim for claim in claims), claims)
+            (root / '\"present.js\"').write_text("// exact quote-named file exists\n")
+            self.assertFalse(any("missing local file" in finding["claim"] for finding in audit.audit_path(root, "pin")["findings"]))
 
     def test_exit_comments_paths_and_unresolved_shell_context(self):
         for command in ("python --help missing.py", "python -uV missing.py", "node --version missing.js", "bash --help missing.sh"):
