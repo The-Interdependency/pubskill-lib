@@ -166,6 +166,7 @@ class ExamineCliTests(unittest.TestCase):
         self.assertEqual(before, (self.root / "tool.py").read_text())
 
     def test_json_apply_reports_recovery_paths(self):
+        (self.root / "recovery_probe.py").write_text("print('fresh source')\n")
         result = self._run("--apply", "--json")
         self.assertEqual(0, result.returncode, result.stderr)
         report = json.loads(result.stdout)
@@ -174,6 +175,7 @@ class ExamineCliTests(unittest.TestCase):
             self.assertTrue((self.root / relative).is_file())
 
     def test_apply_writes_ratios_and_assembles_docs(self):
+        (self.root / "recovery_probe.py").write_text("print('fresh source')\n")
         shell_before = (self.root / "run.sh").read_bytes()
         result = self._run("--apply", "--out", "docs/examiner")
         self.assertEqual(0, result.returncode, result.stderr)
