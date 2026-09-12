@@ -555,7 +555,8 @@ class PackageScriptTests(unittest.TestCase):
         self.assertEqual(["real.js", "next.js"], list(audit._local_script_targets("node real.js # disabled && node missing.js\nnode next.js")))
         self.assertEqual(["missing.js"], list(audit._local_script_targets("/usr/bin/node missing.js")))
         self.assertEqual(["missing.py"], list(audit._local_script_targets("./venv/bin/python missing.py")))
-        for command in ("node 'missing.js", "cd frontend && node build.js", "node --unknown-option value missing.js", "unknown-runner missing.js"):
+        self.assertEqual(["$literal.js"], list(audit._local_script_targets("node '$literal.js'")))
+        for command in ("node 'missing.js", "cd frontend && node build.js", "node --unknown-option value missing.js", "unknown-runner missing.js", "node $SCRIPT", "node *.js", "(cd frontend && node build.js)", "node < input.js", "node \\\n missing.js"):
             unresolved = []
             self.assertEqual([], list(audit._local_script_targets(command, unresolved)), command)
             self.assertTrue(unresolved, command)
