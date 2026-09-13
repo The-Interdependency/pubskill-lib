@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>pubskill audit</title>
+  <style>
+    body{font-family:sans-serif;max-width:800px;margin:auto;padding:24px}
+    input{width:100%;padding:12px;box-sizing:border-box}
+    button{margin-top:10px;padding:12px 18px}
+    .finding{border:1px solid #ccc;border-radius:8px;padding:12px;margin:12px 0}
+    .meta{font-size:.9em;opacity:.7}
+    pre{white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <h1>Repository Audit</h1>
+
+  <input id="repo" placeholder="https://github.com/owner/repo.git">
+  <button onclick="runAudit()">Audit</button>
+
+  <div id="out"></div>
+
+  <script>
+    async function runAudit() {
+      const out = document.getElementById("out");
+      out.innerHTML = "<p>Running audit...</p>";
+
+      const response = await fetch("/audit", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          repo_url: document.getElementById("repo").value
+        })
+      });
+
+      const r = await response.json();
+
+      if (!response.ok) {
+        out.innerHTML = `<pre>${r.error || "Audit failed"}</pre>`;
+        return;
+      }
+
+      let html = `
+        <h2>${r.target?.remote || "Repository"}</h2>
+        <p class="meta">Commit: ${r.target?.commit || "unknown"}</p>
+        <h3>${r.findings.length} findings</h3>
+      `;
+
+      for (const f of r.findings) {
+        html += `
+          <div class="finding">
+            <strong>${f.id} — ${f.surface}</strong>
+            <p>${f.claim}</p>
+            <div class="meta">
+              Evidence: ${f.evidence}<br>
+              Class: ${f.class}
+            </div>
+          </div>
+        `;
+      }
+
+      if (r.hmmm?.length) {
+        html += `<h3>hmmm</h3><ul>` +
+          r.hmmm.map(x => `<li>${x}</li>`).join("") +
+          `</ul>`;
+      }
+
+      out.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
