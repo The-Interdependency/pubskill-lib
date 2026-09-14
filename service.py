@@ -170,7 +170,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(500, {"error": "audit failed"})
 
 
-ThreadingHTTPServer(
-    ("0.0.0.0", int(os.environ.get("PORT", "8080"))),
-    Handler,
-).serve_forever()
+def main():
+    ThreadingHTTPServer(
+        ("0.0.0.0", int(os.environ.get("PORT", "8080"))),
+        Handler,
+    ).serve_forever()
+
+
+if __name__ == "__main__":
+    main()
