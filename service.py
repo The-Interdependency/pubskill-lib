@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-import re
 import subprocess
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,16 +10,43 @@ from urllib.request import Request, urlopen
 
 from pubskill_lib.audit import audit_path
 
-REPO = re.compile(r"^https://github\.com/[^/]+/[^/]+(?:\.git)?$")
+ALLOWED_GIT_HOSTS = {
+    "github.com",
+    "gitlab.com",
+    "bitbucket.org",
+    "codeberg.org",
+    "git.sr.ht",
+}
 PAYMENT_LINK_ID = "plink_1UFLuMAyiOEDWiRnLUiYEx3Y"
 PAYMENT_LINK_URL = "https://buy.stripe.com/14A6oG5Sk9MWg8z3UO5EY01"
 PRICE_CENTS = 1900
 FREE_FINDINGS = 3
 
 
+def valid_repo_url(value):
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except (TypeError, ValueError):
+        return False
+
+    parts = [part for part in parsed.path.split("/") if part]
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname in ALLOWED_GIT_HOSTS
+        and parsed.username is None
+        and parsed.password is None
+        and port is None
+        and not parsed.query
+        and not parsed.fragment
+        and len(parts) >= 2
+        and ".." not in parts
+    )
+
+
 def run_audit(repo_url):
-    if not REPO.fullmatch(repo_url):
-        raise ValueError("public github.com repository required")
+    if not valid_repo_url(repo_url):
+        raise ValueError("supported public Git repository required")
 
     with tempfile.TemporaryDirectory() as tmp:
         target = os.path.join(tmp, "repo")
@@ -59,10 +85,10 @@ def paid_repo(session):
     for field in session.get("custom_fields") or []:
         if field.get("key") == "githubrepo" and field.get("type") == "text":
             repo_url = (field.get("text") or {}).get("value", "").strip()
-            if REPO.fullmatch(repo_url):
+            if valid_repo_url(repo_url):
                 return repo_url
 
-    raise ValueError("paid checkout is missing a valid GitHub repository URL")
+    raise ValueError("paid checkout is missing a valid supported Git repository URL")
 
 
 class Handler(BaseHTTPRequestHandler):
