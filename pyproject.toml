@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 license = "MPL-2.0"
 
 [project.scripts]
-pubskill-audit = "pubskill_lib.audit:main"
+pubskill-inspect = "pubskill_lib.audit:main"
 pubskill-examine = "pubskill_lib.examine:main"
 
 [tool.setuptools.packages.find]
