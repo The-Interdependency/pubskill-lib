@@ -13,19 +13,19 @@
     .pubskill-head { margin-bottom: 2rem; }
     .pubskill-head h1 { font-size: clamp(2.8rem, 8vw, 5.8rem); margin-bottom: .8rem; }
     .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0 2rem; }
-    .choice-card { display: flex; flex-direction: column; min-height: 18rem; }
+    .choice-card { display: flex; flex-direction: column; min-height: 15rem; }
     .choice-card h2 { margin: .25rem 0 .7rem; }
     .choice-card p { color: var(--silver); }
     .choice-card .question { color: var(--starlight); font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.2rem, 2.4vw, 1.55rem); line-height: 1.35; }
     .choice-card .actions { margin-top: auto; }
     .choice-card[aria-current="true"] { border-color: var(--violet); box-shadow: var(--shadow); }
     .product-panel { margin-top: 1.5rem; }
-    .product-panel[hidden] { display: none; }
+    .product-panel[hidden], .tier-panel[hidden], .operator-panel[hidden] { display: none; }
     .audit-panel { padding: clamp(1.2rem, 4vw, 2rem); background: linear-gradient(145deg, rgba(22,33,58,.9), rgba(16,24,42,.86)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-    .audit-panel label { display: block; margin-bottom: .55rem; color: var(--cyan); font: 700 .76rem/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .12em; }
-    .repo-field { width: 100%; min-height: 3.2rem; padding: .8rem .95rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--night); color: var(--starlight); font: inherit; }
-    .repo-field::placeholder { color: #6f7d98; }
-    .repo-field:focus { border-color: var(--violet); outline: 3px solid rgba(155,135,245,.18); outline-offset: 2px; }
+    .audit-panel label { display: block; margin: .8rem 0 .4rem; color: var(--cyan); font: 700 .76rem/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .12em; }
+    .repo-field, .code-field { width: 100%; min-height: 3.2rem; padding: .8rem .95rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--night); color: var(--starlight); font: inherit; }
+    .repo-field::placeholder, .code-field::placeholder { color: #6f7d98; }
+    .repo-field:focus, .code-field:focus { border-color: var(--violet); outline: 3px solid rgba(155,135,245,.18); outline-offset: 2px; }
     .audit-actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
     button.button { cursor: pointer; font: inherit; }
     #status { min-height: 1.6rem; margin: 1rem 0 0; color: var(--silver); }
@@ -35,11 +35,14 @@
     .finding > strong { color: var(--cyan); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .02em; }
     .finding p { color: var(--starlight); }
     .meta { color: var(--silver); font-size: .88rem; overflow-wrap: anywhere; }
-    .buy { margin-top: .8rem; }
     .support-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
     .examiner-choices { margin-top: 1rem; }
     .examiner-choices .card { min-height: 11rem; }
     .boundary-note { margin-top: 1rem; }
+    .tier-choices .card { min-height: 11rem; }
+    .tier-panel { margin-top: 1rem; }
+    .access-row { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+    .batch-result { margin: 1rem 0 1.5rem; }
     .site-footer a { color: var(--silver); }
     @media (max-width: 780px) {
       .pubskill-head h1 { font-size: clamp(2.55rem, 13vw, 4.2rem); }
@@ -76,7 +79,7 @@
           <p class="eyebrow">Audit</p>
           <h2>Repository Audit</h2>
           <p class="question">Which repository claims hold up, and which fail against the evidence?</p>
-          <p>Three findings are free. Unlock the complete audit for $5. Target code is not executed.</p>
+          <p>Three findings are free. Full audits can be purchased for one repository or five at a time.</p>
           <div class="actions"><button class="button" id="choose-audit" type="button">Audit</button></div>
         </article>
 
@@ -102,15 +105,62 @@
           </div>
         </div>
 
-        <div class="audit-panel" aria-labelledby="audit-label">
-          <label id="audit-label" for="repo">Public Git repository URL</label>
-          <input class="repo-field" id="repo" inputmode="url" autocomplete="url" placeholder="https://github.com/owner/repo.git">
-          <div class="audit-actions">
-            <button class="button" id="audit" type="button">Run free audit</button>
-          </div>
-          <div id="status" role="status" aria-live="polite"></div>
+        <div class="choice-grid tier-choices" aria-label="Audit quantity">
+          <article class="card choice-card" id="single-choice" aria-current="true">
+            <p class="eyebrow">One repository</p>
+            <h3>$5 full audit</h3>
+            <p>Run the free three-finding preview first, then unlock the complete result.</p>
+            <div class="actions"><button class="button" id="choose-single" type="button">1 repository</button></div>
+          </article>
+          <article class="card choice-card" id="bundle-choice">
+            <p class="eyebrow">Five repositories</p>
+            <h3>$20 bundle</h3>
+            <p>Bind five public repository URLs to one checkout and receive five complete audits.</p>
+            <div class="actions"><button class="button secondary" id="choose-bundle" type="button">5 repositories</button></div>
+          </article>
         </div>
 
+        <section class="tier-panel" id="single-panel">
+          <div class="audit-panel">
+            <label for="repo">Public Git repository URL</label>
+            <input class="repo-field" id="repo" inputmode="url" autocomplete="url" placeholder="https://github.com/owner/repo.git">
+            <div class="audit-actions">
+              <button class="button" id="audit" type="button">Run free audit</button>
+            </div>
+            <div class="access-row">
+              <p class="eyebrow">Complete audit</p>
+              <div class="audit-actions">
+                <button class="button" id="pay-single" type="button">Pay $5</button>
+                <button class="button secondary" id="code-single" type="button">Use access code</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tier-panel" id="bundle-panel" hidden>
+          <div class="audit-panel">
+            <p class="eyebrow">Five repositories · $20</p>
+            <div id="bundle-fields"></div>
+            <div class="access-row">
+              <div class="audit-actions">
+                <button class="button" id="pay-bundle" type="button">Pay $20</button>
+                <button class="button secondary" id="code-bundle" type="button">Use access code</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="operator-panel panel" id="operator-panel" hidden>
+          <p class="eyebrow">Operator access</p>
+          <label for="operator-code">Access code</label>
+          <input class="code-field" id="operator-code" type="password" autocomplete="off" placeholder="Enter access code">
+          <div class="audit-actions">
+            <button class="button" id="run-operator" type="button">Run full audit</button>
+            <button class="button secondary" id="cancel-operator" type="button">Cancel</button>
+          </div>
+        </section>
+
+        <div id="status" role="status" aria-live="polite"></div>
         <div id="out"></div>
       </section>
 
@@ -158,6 +208,27 @@
     const examinerPanel = document.getElementById("examiner-panel");
     const auditChoice = document.getElementById("audit-choice");
     const examinerChoice = document.getElementById("examiner-choice");
+    const singleChoice = document.getElementById("single-choice");
+    const bundleChoice = document.getElementById("bundle-choice");
+    const singlePanel = document.getElementById("single-panel");
+    const bundlePanel = document.getElementById("bundle-panel");
+    const operatorPanel = document.getElementById("operator-panel");
+    const operatorCode = document.getElementById("operator-code");
+    let activeTier = "single";
+
+    const bundleFields = document.getElementById("bundle-fields");
+    for (let index = 1; index <= 5; index += 1) {
+      const label = document.createElement("label");
+      label.htmlFor = `repo-${index}`;
+      label.textContent = `Repository ${index}`;
+      const input = document.createElement("input");
+      input.className = "repo-field bundle-repo";
+      input.id = `repo-${index}`;
+      input.inputMode = "url";
+      input.autocomplete = "url";
+      input.placeholder = `https://github.com/owner/repo-${index}.git`;
+      bundleFields.append(label, input);
+    }
 
     function selectProduct(product) {
       const auditSelected = product === "audit";
@@ -168,6 +239,24 @@
       (auditSelected ? auditPanel : examinerPanel).scrollIntoView({behavior: "smooth", block: "start"});
     }
 
+    function selectTier(tier) {
+      activeTier = tier;
+      const single = tier === "single";
+      singlePanel.hidden = !single;
+      bundlePanel.hidden = single;
+      singleChoice.setAttribute("aria-current", String(single));
+      bundleChoice.setAttribute("aria-current", String(!single));
+      operatorPanel.hidden = true;
+      operatorCode.value = "";
+      status.textContent = "";
+      out.replaceChildren();
+    }
+
+    function repoUrlsFor(tier) {
+      if (tier === "single") return [repo.value.trim()];
+      return [...document.querySelectorAll(".bundle-repo")].map(input => input.value.trim());
+    }
+
     function add(tag, text, parent = out, className = "") {
       const node = document.createElement(tag);
       node.textContent = text;
@@ -176,58 +265,86 @@
       return node;
     }
 
-    function clear() {
+    function clearResults() {
       status.textContent = "";
       out.replaceChildren();
     }
 
-    function renderFinding(f) {
+    function renderFinding(f, parent) {
       const card = document.createElement("article");
       card.className = "card finding";
       add("strong", `${f.id} — ${f.surface}`, card);
       add("p", f.claim, card);
       add("div", `Evidence: ${f.evidence}`, card, "meta");
       add("div", `Class: ${f.class}`, card, "meta");
-      out.appendChild(card);
+      parent.appendChild(card);
     }
 
-    function renderResult(r, paid = false) {
-      clear();
-      add("p", paid ? "full audit" : "free preview", out, "eyebrow");
-      add("h2", r.target?.remote || "Repository");
-      add("p", `Commit: ${r.target?.commit || "unknown"}`, out, "meta");
-
-      const count = paid ? (r.findings?.length || 0) : (r.total_findings ?? r.findings?.length ?? 0);
-      add("h3", `${count} findings${paid ? "" : " total"}`);
-
-      for (const finding of r.findings || []) renderFinding(finding);
-
-      if (paid && r.hmmm?.length) {
+    function renderFullResult(result, parent) {
+      add("h3", result.target?.remote || "Repository", parent);
+      add("p", `Commit: ${result.target?.commit || "unknown"}`, parent, "meta");
+      add("p", `${result.findings?.length || 0} findings`, parent);
+      for (const finding of result.findings || []) renderFinding(finding, parent);
+      if (result.hmmm?.length) {
         const boundary = document.createElement("section");
         boundary.className = "hmmm";
         add("h3", "hmmm", boundary);
         const list = document.createElement("ul");
-        for (const item of r.hmmm) add("li", item, list);
+        for (const item of result.hmmm) add("li", item, list);
         boundary.appendChild(list);
-        out.appendChild(boundary);
+        parent.appendChild(boundary);
       }
+    }
 
-      if (!paid && r.locked) {
+    function renderBatch(payload) {
+      clearResults();
+      add("p", payload.operator ? "operator audit" : "paid audit", out, "eyebrow");
+      add("h2", `${payload.repository_count} complete audit${payload.repository_count === 1 ? "" : "s"}`);
+      for (const item of payload.audits || []) {
+        const section = document.createElement("section");
+        section.className = "panel batch-result";
+        if (item.error) {
+          add("h3", item.repo_url, section);
+          add("p", item.error, section);
+        } else {
+          renderFullResult(item.result, section);
+        }
+        out.appendChild(section);
+      }
+    }
+
+    function renderPreview(r) {
+      clearResults();
+      add("p", "free preview", out, "eyebrow");
+      add("h2", r.target?.remote || "Repository");
+      add("p", `Commit: ${r.target?.commit || "unknown"}`, out, "meta");
+      add("h3", `${r.total_findings ?? r.findings?.length ?? 0} findings total`);
+      for (const finding of r.findings || []) renderFinding(finding, out);
+      if (r.locked) {
         const gate = document.createElement("section");
         gate.className = "panel";
         add("h3", "Full audit", gate);
-        add("p", `Preview shows the first ${r.findings.length}. Full audit also includes remaining findings and ${r.hmmm_count || 0} unresolved constraint(s).`, gate);
-        const buy = document.createElement("a");
-        buy.href = r.payment_link;
-        buy.className = "button buy";
-        buy.textContent = "Unlock full audit — $5";
-        gate.appendChild(buy);
+        add("p", `Preview shows the first ${r.findings.length}. The complete audit also includes remaining findings and ${r.hmmm_count || 0} unresolved constraint(s).`, gate);
+        const actions = document.createElement("div");
+        actions.className = "audit-actions";
+        const pay = document.createElement("button");
+        pay.className = "button";
+        pay.type = "button";
+        pay.textContent = "Pay $5";
+        pay.addEventListener("click", () => startCheckout("single"));
+        const code = document.createElement("button");
+        code.className = "button secondary";
+        code.type = "button";
+        code.textContent = "Use access code";
+        code.addEventListener("click", () => showOperator("single"));
+        actions.append(pay, code);
+        gate.appendChild(actions);
         out.appendChild(gate);
       }
     }
 
     async function runAudit() {
-      clear();
+      clearResults();
       status.textContent = "Running audit…";
       try {
         const response = await fetch("/audit", {
@@ -237,32 +354,89 @@
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Audit failed");
-        renderResult(result, false);
+        renderPreview(result);
       } catch (error) {
-        clear();
+        clearResults();
+        status.textContent = error.message;
+      }
+    }
+
+    async function startCheckout(tier) {
+      clearResults();
+      status.textContent = "Creating checkout…";
+      try {
+        const response = await fetch("/checkout", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({tier, repo_urls: repoUrlsFor(tier)})
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Checkout failed");
+        location.assign(result.checkout_url);
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    }
+
+    function showOperator(tier) {
+      activeTier = tier;
+      operatorPanel.hidden = false;
+      operatorCode.focus();
+      operatorPanel.scrollIntoView({behavior: "smooth", block: "center"});
+    }
+
+    async function runOperator() {
+      clearResults();
+      status.textContent = "Running full audit…";
+      try {
+        const response = await fetch("/operator/audit", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            code: operatorCode.value,
+            repo_urls: repoUrlsFor(activeTier)
+          })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Operator audit failed");
+        operatorCode.value = "";
+        operatorPanel.hidden = true;
+        renderBatch(result);
+      } catch (error) {
         status.textContent = error.message;
       }
     }
 
     async function loadPaid(sessionId) {
       selectProduct("audit");
-      clear();
-      status.textContent = "Verifying payment and running full audit…";
+      clearResults();
+      status.textContent = "Verifying payment and running audit…";
       try {
         const response = await fetch(`/paid?session_id=${encodeURIComponent(sessionId)}`);
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Paid audit failed");
-        renderResult(result, true);
+        renderBatch(result);
         history.replaceState({}, "", "/");
       } catch (error) {
-        clear();
+        clearResults();
         status.textContent = error.message;
       }
     }
 
     document.getElementById("choose-audit").addEventListener("click", () => selectProduct("audit"));
     document.getElementById("choose-examiner").addEventListener("click", () => selectProduct("examiner"));
+    document.getElementById("choose-single").addEventListener("click", () => selectTier("single"));
+    document.getElementById("choose-bundle").addEventListener("click", () => selectTier("bundle5"));
     document.getElementById("audit").addEventListener("click", runAudit);
+    document.getElementById("pay-single").addEventListener("click", () => startCheckout("single"));
+    document.getElementById("pay-bundle").addEventListener("click", () => startCheckout("bundle5"));
+    document.getElementById("code-single").addEventListener("click", () => showOperator("single"));
+    document.getElementById("code-bundle").addEventListener("click", () => showOperator("bundle5"));
+    document.getElementById("run-operator").addEventListener("click", runOperator);
+    document.getElementById("cancel-operator").addEventListener("click", () => {
+      operatorPanel.hidden = true;
+      operatorCode.value = "";
+    });
     repo.addEventListener("keydown", event => {
       if (event.key === "Enter") runAudit();
     });
