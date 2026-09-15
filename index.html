@@ -1,28 +1,90 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>pubskill audit</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#090d18">
+  <title>Repository Audit · The Interdependent Way</title>
+  <meta name="description" content="Evidence-led repository auditing for public Git repositories.">
+  <link rel="stylesheet" href="https://interdependentway.org/assets/css/site.css">
   <style>
-    body{font-family:sans-serif;max-width:800px;margin:auto;padding:24px}
-    input{width:100%;padding:12px;box-sizing:border-box}
-    button,.buy{display:inline-block;margin-top:10px;padding:12px 18px}
-    .buy{background:#111;color:#fff;text-decoration:none;border-radius:4px}
-    .finding{border:1px solid #ccc;border-radius:8px;padding:12px;margin:12px 0}
-    .meta{font-size:.9em;opacity:.7;overflow-wrap:anywhere}
-    #status{margin:16px 0}
+    .audit-shell { max-width: 58rem; margin: 0 auto; }
+    .audit-head { margin-bottom: 2rem; }
+    .audit-head h1 { font-size: clamp(2.8rem, 8vw, 5.8rem); margin-bottom: .8rem; }
+    .audit-panel { padding: clamp(1.2rem, 4vw, 2rem); background: linear-gradient(145deg, rgba(22,33,58,.9), rgba(16,24,42,.86)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .audit-panel label { display: block; margin-bottom: .55rem; color: var(--cyan); font: 700 .76rem/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .12em; }
+    .repo-field { width: 100%; min-height: 3.2rem; padding: .8rem .95rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--night); color: var(--starlight); font: inherit; }
+    .repo-field::placeholder { color: #6f7d98; }
+    .repo-field:focus { border-color: var(--violet); outline: 3px solid rgba(155,135,245,.18); outline-offset: 2px; }
+    .audit-actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+    button.button { cursor: pointer; font: inherit; }
+    #status { min-height: 1.6rem; margin: 1rem 0 0; color: var(--silver); }
+    #out { margin-top: 2rem; }
+    #out > h2 { overflow-wrap: anywhere; }
+    .finding { margin: .85rem 0; }
+    .finding > strong { color: var(--cyan); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .02em; }
+    .finding p { color: var(--starlight); }
+    .meta { color: var(--silver); font-size: .88rem; overflow-wrap: anywhere; }
+    .buy { margin-top: .8rem; }
+    .support-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+    .site-footer a { color: var(--silver); }
+    @media (max-width: 780px) {
+      .audit-head h1 { font-size: clamp(2.55rem, 13vw, 4.2rem); }
+      .site-header { align-items: center; }
+      .primary-nav { display: flex; width: auto; }
+      .primary-nav a { border: 0; padding: .45rem .55rem; }
+    }
   </style>
 </head>
 <body>
-  <h1>Repository Audit</h1>
-  <p class="meta">Supports public GitHub, GitLab, Bitbucket, Codeberg, and SourceHut repositories.</p>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="https://interdependentway.org/home/" aria-label="The Interdependent Way home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong>The Interdependent Way</strong><small>public utility</small></span>
+    </a>
+    <nav class="primary-nav" aria-label="Primary navigation">
+      <a href="https://interdependentway.org/projects/">Projects</a>
+      <a href="https://github.com/The-Interdependency/pubskill-lib">Source</a>
+    </nav>
+  </header>
 
-  <input id="repo" placeholder="https://github.com/owner/repo.git">
-  <button id="audit">Audit</button>
+  <main id="content" class="site-main">
+    <div class="audit-shell">
+      <section class="audit-head">
+        <p class="eyebrow">pubskill-lib · repository evidence</p>
+        <h1>Repository Audit</h1>
+        <p class="lede">Test repository claims against repository evidence. No target code is executed.</p>
+        <div class="support-row" aria-label="Supported Git hosts">
+          <span class="status status-public">GitHub</span>
+          <span class="status status-public">GitLab</span>
+          <span class="status status-public">Bitbucket</span>
+          <span class="status status-public">Codeberg</span>
+          <span class="status status-public">SourceHut</span>
+        </div>
+      </section>
 
-  <div id="status"></div>
-  <div id="out"></div>
+      <section class="audit-panel" aria-labelledby="audit-label">
+        <label id="audit-label" for="repo">Public Git repository URL</label>
+        <input class="repo-field" id="repo" inputmode="url" autocomplete="url" placeholder="https://github.com/owner/repo.git">
+        <div class="audit-actions">
+          <button class="button" id="audit" type="button">Audit repository</button>
+        </div>
+        <div id="status" role="status" aria-live="polite"></div>
+      </section>
+
+      <div id="out"></div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div>
+      <strong>The Interdependent Way</strong>
+      <p>Evidence first. Claims remain claims until demonstrated.</p>
+    </div>
+    <div class="hmmm-boundary"><strong>hmmm</strong><span>Honest incompletion remains visible so the next action has somewhere true to begin.</span></div>
+  </footer>
 
   <script>
     const repo = document.getElementById("repo");
@@ -43,8 +105,8 @@
     }
 
     function renderFinding(f) {
-      const card = document.createElement("div");
-      card.className = "finding";
+      const card = document.createElement("article");
+      card.className = "card finding";
       add("strong", `${f.id} — ${f.surface}`, card);
       add("p", f.claim, card);
       add("div", `Evidence: ${f.evidence}`, card, "meta");
@@ -54,6 +116,7 @@
 
     function renderResult(r, paid = false) {
       clear();
+      add("p", paid ? "full audit" : "free preview", out, "eyebrow");
       add("h2", r.target?.remote || "Repository");
       add("p", `Commit: ${r.target?.commit || "unknown"}`, out, "meta");
 
@@ -63,25 +126,32 @@
       for (const finding of r.findings || []) renderFinding(finding);
 
       if (paid && r.hmmm?.length) {
-        add("h3", "hmmm");
+        const boundary = document.createElement("section");
+        boundary.className = "hmmm";
+        add("h3", "hmmm", boundary);
         const list = document.createElement("ul");
         for (const item of r.hmmm) add("li", item, list);
-        out.appendChild(list);
+        boundary.appendChild(list);
+        out.appendChild(boundary);
       }
 
       if (!paid && r.locked) {
-        add("p", `Preview shows the first ${r.findings.length}. Full audit also includes remaining findings and ${r.hmmm_count || 0} unresolved constraint(s).`);
+        const gate = document.createElement("section");
+        gate.className = "panel";
+        add("h3", "Full audit", gate);
+        add("p", `Preview shows the first ${r.findings.length}. Full audit also includes remaining findings and ${r.hmmm_count || 0} unresolved constraint(s).`, gate);
         const buy = document.createElement("a");
         buy.href = r.payment_link;
-        buy.className = "buy";
+        buy.className = "button buy";
         buy.textContent = "Unlock full audit — $19";
-        out.appendChild(buy);
+        gate.appendChild(buy);
+        out.appendChild(gate);
       }
     }
 
     async function runAudit() {
       clear();
-      status.textContent = "Running audit...";
+      status.textContent = "Running audit…";
       try {
         const response = await fetch("/audit", {
           method: "POST",
@@ -99,7 +169,7 @@
 
     async function loadPaid(sessionId) {
       clear();
-      status.textContent = "Verifying payment and running full audit...";
+      status.textContent = "Verifying payment and running full audit…";
       try {
         const response = await fetch(`/paid?session_id=${encodeURIComponent(sessionId)}`);
         const result = await response.json();
@@ -113,6 +183,9 @@
     }
 
     document.getElementById("audit").addEventListener("click", runAudit);
+    repo.addEventListener("keydown", event => {
+      if (event.key === "Enter") runAudit();
+    });
 
     const sessionId = new URLSearchParams(location.search).get("session_id");
     if (sessionId) loadPaid(sessionId);
