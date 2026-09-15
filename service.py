@@ -17,9 +17,9 @@ ALLOWED_GIT_HOSTS = {
     "codeberg.org",
     "git.sr.ht",
 }
-PAYMENT_LINK_ID = "plink_1UFLuMAyiOEDWiRnLUiYEx3Y"
-PAYMENT_LINK_URL = "https://buy.stripe.com/14A6oG5Sk9MWg8z3UO5EY01"
-PRICE_CENTS = 1900
+PAYMENT_LINK_ID = "plink_1UFlbvAyiOEDWiRnnsPOpA2P"
+PAYMENT_LINK_URL = "https://buy.stripe.com/bJe9AS94w9MW09B7705EY02"
+PRICE_CENTS = 500
 FREE_FINDINGS = 3
 
 
