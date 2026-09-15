@@ -7,19 +7,11 @@ The hosted surface at `https://pubskill.interdependentway.org/` preserves two pr
 
 ## Audit purchases
 
-A complete repository audit costs **$5 USD**. Customers may purchase any positive number of audits in one checkout. For every group of five audits, the fifth is free:
+A complete single-repository audit costs **$5 USD**. Customers may purchase any positive number of audits in one checkout. The applicable total is calculated automatically from the selected quantity.
 
-- 1 audit: $5
-- 4 audits: $20
-- 5 audits: $20
-- 6 audits: $25
-- 10 audits: $40
+A single repository may first receive a three-finding free preview. For paid audits, repository URLs are supplied before checkout. The service stores the repository count and a SHA-256 digest of the ordered URL list in Stripe Checkout Session metadata, rather than storing an arbitrary number of repository URLs in Stripe metadata. The checkout amount is derived server-side from the selected repository count.
 
-The pricing rule is `paid_count = repository_count - floor(repository_count / 5)`.
-
-A single repository may first receive a three-finding free preview. For paid audits, repository URLs are supplied before checkout. The service stores the repository count and a SHA-256 digest of the ordered URL list in Stripe Checkout Session metadata, rather than storing an arbitrary number of repository URLs in Stripe metadata. The Checkout line-item quantity equals the number of paid audits after applying the every-fifth-free rule.
-
-On return from Stripe, the browser resubmits the repository list. The service verifies live payment state, amount, paid/free counts, repository count, and the URL-list digest before running the complete audits. The browser keeps the pending list only in session storage during checkout. If that state is lost, the service exposes the paid repository count so the customer can re-enter the same URLs and recover the purchase.
+On return from Stripe, the browser resubmits the repository list. The service verifies live payment state, amount, repository count, and the URL-list digest before running the complete audits. The browser keeps the pending list only in session storage during checkout. If that state is lost, the service exposes the paid repository count so the customer can re-enter the same URLs and recover the purchase.
 
 Supported public HTTPS Git hosts are GitHub, GitLab, Bitbucket, Codeberg, and SourceHut. Target repository code is not executed.
 
