@@ -30,7 +30,7 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
 ```
 
-Those commands are the definition of done for the first utility tag (`v0.2.0`). They run in GitHub CI from a clean checkout; publish the tag only after the release gate is explicitly completed.
+Those commands were the release gate for the first utility tag, `v0.2.0`. That tag is already published and immutable. Keep the same clean-checkout gate as the source baseline, but do not recreate, move, or republish `v0.2.0`; any later publication must use its own version identity after the applicable release gate passes.
 
 ## Reproduce release artifacts
 
