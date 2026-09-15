@@ -1,49 +1,51 @@
 # Hosted pubskill service
 
-The hosted surface at `https://pubskill.interdependentway.org/` preserves two product questions:
+The hosted surface at `https://pubskill.interdependentway.org/` exposes two truthfully bounded products:
 
-- **Audit:** Which repository claims hold up, and which fail against the evidence?
+- **Inspection:** What obvious repository defects and unresolved static boundaries can be found without executing the repository?
 - **Examiner:** What is actually in this codebase, how is it structured and documented, what can be measured safely, and where are the unresolved boundaries?
 
-## Audit purchases
+## Repository inspection
 
-A complete single-repository audit costs **$5 USD**. Customers may purchase any positive number of audits in one checkout. The applicable total is calculated automatically from the selected quantity.
+Hosted inspection is **free**.
 
-A single repository may first receive a three-finding free preview. For paid audits, repository URLs are supplied before checkout. The service stores the repository count and a SHA-256 digest of the ordered URL list in Stripe Checkout Session metadata, rather than storing an arbitrary number of repository URLs in Stripe metadata. The checkout amount is derived server-side from the selected repository count.
+It clones one supported public HTTPS Git repository and runs the existing static inspector. The inspector may report repository identity, broken local README links, obvious CI no-ops, missing declared Python entry points, and directly referenced local script targets that are missing or escape the repository.
 
-On return from Stripe, the browser resubmits the repository list. The service verifies live payment state, amount, repository count, and the URL-list digest before running the complete audits. The browser keeps the pending list only in session storage during checkout. If that state is lost, the service exposes the paid repository count so the customer can re-enter the same URLs and recover the purchase.
+The hosted inspector does **not** install target dependencies, execute target repository code, run target tests, reproduce builds, inspect runtime behavior, or establish deployment health. A clean inspection result is therefore not a health certificate.
 
-Supported public HTTPS Git hosts are GitHub, GitLab, Bitbucket, Codeberg, and SourceHut. Target repository code is not executed.
-
-## Operator access
-
-`PUBSKILL_OPERATOR_CODE` configures a private server-side access code for demonstration and operator use. The value must be supplied as deployment secret/environment state; it must not be committed to this repository. The service compares the submitted code server-side and never stores it in repository state or browser storage.
-
-Operator access runs the same complete audit path for any positive number of repository URLs without creating a Stripe checkout.
-
-## Deployment configuration
-
-Required for paid checkout:
+Usage:
 
 ```text
-STRIPE_SECRET_KEY
+POST /inspect
+Content-Type: application/json
+
+{"repo_url":"https://github.com/owner/repo"}
 ```
 
-Required for private operator bypass:
+Supported public HTTPS Git hosts are GitHub, GitLab, Bitbucket, Codeberg, and SourceHut.
 
-```text
-PUBSKILL_OPERATOR_CODE
-```
+## Retired paid audit surface
 
-Optional hosted URL overrides:
+The previous `/audit`, `/checkout`, `/paid`, and `/operator/audit` endpoints are retired. They return HTTP 410 and point callers to `/inspect`.
 
-```text
-PUBSKILL_SUCCESS_URL
-PUBSKILL_CANCEL_URL
-```
+Static inspection is not sold as a complete repository audit.
 
-The defaults return successful checkout to `https://pubskill.interdependentway.org/?session_id={CHECKOUT_SESSION_ID}` and cancellation to the site root.
+## Repository audit boundary
+
+A true repository audit is not currently offered by the hosted service. It requires a separate execution boundary capable of running applicable repository gates in isolation and emitting reproducible receipts for the exact repository identity, commands, exit states, and artifacts observed.
+
+That execution system does not yet exist in `pubskill-lib`; the missing capability remains `hmmm` rather than being represented by the static inspector.
 
 ## Examiner boundary
 
 Structural examination does not require AI. AI is optional for narration. Hosted Examiner execution, metering, and pricing remain `hmmm` until measured against real repository runs; the hosted site must not imply those capabilities are already available.
+
+## Deployment
+
+The current inspection service requires no payment credentials or private operator bypass. Run the service with:
+
+```bash
+python service.py
+```
+
+The process listens on `PORT`, defaulting to `8080`.
