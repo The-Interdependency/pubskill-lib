@@ -7,12 +7,19 @@ The hosted surface at `https://pubskill.interdependentway.org/` preserves two pr
 
 ## Audit purchases
 
-The hosted audit supports two purchase sizes:
+A complete repository audit costs **$5 USD**. Customers may purchase any positive number of audits in one checkout. For every group of five audits, the fifth is free:
 
-- one complete repository audit: **$5 USD**
-- five complete repository audits: **$20 USD**
+- 1 audit: $5
+- 4 audits: $20
+- 5 audits: $20
+- 6 audits: $25
+- 10 audits: $40
 
-A single repository may first receive a three-finding free preview. Paid checkout is created only after the repository URL or five repository URLs have been supplied. The exact URLs and purchase tier are bound into Stripe Checkout Session metadata before payment; the return handler verifies live payment state, amount, tier, count, and repository URLs before running the complete audits.
+The pricing rule is `paid_count = repository_count - floor(repository_count / 5)`.
+
+A single repository may first receive a three-finding free preview. For paid audits, repository URLs are supplied before checkout. The service stores the repository count and a SHA-256 digest of the ordered URL list in Stripe Checkout Session metadata, rather than storing an arbitrary number of repository URLs in Stripe metadata. The Checkout line-item quantity equals the number of paid audits after applying the every-fifth-free rule.
+
+On return from Stripe, the browser resubmits the repository list. The service verifies live payment state, amount, paid/free counts, repository count, and the URL-list digest before running the complete audits. The browser keeps the pending list only in session storage during checkout. If that state is lost, the service exposes the paid repository count so the customer can re-enter the same URLs and recover the purchase.
 
 Supported public HTTPS Git hosts are GitHub, GitLab, Bitbucket, Codeberg, and SourceHut. Target repository code is not executed.
 
@@ -20,7 +27,7 @@ Supported public HTTPS Git hosts are GitHub, GitLab, Bitbucket, Codeberg, and So
 
 `PUBSKILL_OPERATOR_CODE` configures a private server-side access code for demonstration and operator use. The value must be supplied as deployment secret/environment state; it must not be committed to this repository. The service compares the submitted code server-side and never stores it in repository state or browser storage.
 
-Operator access runs the same complete one- or five-repository audit paths without creating a Stripe checkout.
+Operator access runs the same complete audit path for any positive number of repository URLs without creating a Stripe checkout.
 
 ## Deployment configuration
 
