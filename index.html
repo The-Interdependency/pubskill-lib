@@ -83,7 +83,7 @@
           <p class="eyebrow">Audit</p>
           <h2>Repository Audit</h2>
           <p class="question">Which repository claims hold up, and which fail against the evidence?</p>
-          <p>Three findings are free for one repository. Complete audits are $5 each; every fifth audit is free.</p>
+          <p>Three findings are free for one repository. Complete audits start at $5.</p>
           <div class="actions"><button class="button" id="choose-audit" type="button">Audit</button></div>
         </article>
 
@@ -100,7 +100,7 @@
         <div class="page-head">
           <p class="eyebrow">Audit</p>
           <h2 id="audit-title">Which repository claims hold up, and which fail against the evidence?</h2>
-          <p class="promo-line">$5 per complete audit. Buy four and the fifth is free; the rule repeats for every five.</p>
+          <p class="promo-line">Complete audits start at $5. Choose the number of repositories to see the total.</p>
           <div class="support-row" aria-label="Supported Git hosts">
             <span class="status status-public">GitHub</span>
             <span class="status status-public">GitLab</span>
@@ -120,7 +120,7 @@
           <article class="card choice-card" id="multiple-choice">
             <p class="eyebrow">Multiple repositories</p>
             <h3>Choose any quantity</h3>
-            <p>Every fifth audit is free. Five costs $20, ten costs $40, and the same rule continues.</p>
+            <p>Choose the number of repositories. Your total updates automatically.</p>
             <div class="actions"><button class="button secondary" id="choose-multiple" type="button">Multiple repositories</button></div>
           </article>
         </div>
@@ -273,7 +273,7 @@
         const count = validCount();
         buildRepoFields(multipleFields, count, "multiple-repo");
         const price = pricingFor(count);
-        priceSummary.textContent = `${count} complete audits · ${price.free} free · $${price.dollars} total`;
+        priceSummary.textContent = `${count} complete audits · $${price.dollars} total`;
         document.getElementById("pay-multiple").textContent = `Pay $${price.dollars}`;
       } catch (error) {
         priceSummary.textContent = error.message;
@@ -352,9 +352,6 @@
       clearResults();
       add("p", payload.operator ? "operator audit" : "paid audit", out, "eyebrow");
       add("h2", `${payload.repository_count} complete audit${payload.repository_count === 1 ? "" : "s"}`);
-      if (!payload.operator && payload.free_count) {
-        add("p", `${payload.free_count} audit${payload.free_count === 1 ? "" : "s"} free under the every-fifth-free rule.`, out, "meta");
-      }
       for (const item of payload.audits || []) {
         const section = document.createElement("section");
         section.className = "panel batch-result";
