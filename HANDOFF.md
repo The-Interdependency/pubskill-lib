@@ -15,12 +15,12 @@ VM contract: `HANDOFF.vm.md`
 
 A stranger clones this repository, runs the commands in README.md, and gets a findings file for `examples/neglected-repo`.
 
-That is the `v0.2.0` release gate. A VM receipt is not a tag, and an implementation on `main` is not a published release.
+That was the `v0.2.0` release gate. `v0.2.0` is already published and immutable; the current source line is `0.2.1`. A VM receipt is not a tag, and an implementation on `main` is not a later published release.
 
 ## Current closure
 
 - The clean-checkout gate runs in GitHub CI on Python 3.11 and 3.12.
-- `v0.2.0` remains unpublished until the repaired head is merged and the tag is explicitly created.
+- `v0.2.0` is published and immutable. Do not recreate, move, or republish that tag; the next publication must use the current source version or a later explicitly selected version after its release gate passes.
 - Provider base-URL overrides are operator configuration: they may come from the process environment, never from a repository `.env` file.
 
 ## Non-goals for this handoff
@@ -179,8 +179,8 @@ CI runs this gate on Python 3.11 and 3.12. The VM does not push unless `PUSH=1`.
 Not a VM default. Requires `PUSH=1`.
 
 1. Merge only a head that passes the full gate and required review.
-2. Create tag `v0.2.0` explicitly from the accepted release commit.
-3. Claim the release as shipped only after the tag exists.
+2. For the next release, create a new tag that exactly matches the accepted source version and release commit. Never reuse or move `v0.2.0`.
+3. Claim that release as shipped only after its new tag exists and points at the accepted release commit.
 4. Add this repo to skill-lib consumer list only with `WRITE_CANON=1`.
 
 ## Done / not done
