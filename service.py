@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import hmac
 import json
 import os
@@ -18,19 +19,10 @@ ALLOWED_GIT_HOSTS = {
     "codeberg.org",
     "git.sr.ht",
 }
-AUDIT_TIERS = {
-    "single": {
-        "repositories": 1,
-        "amount_cents": 500,
-        "price_id": "price_1UFlntAyiOEDWiRnVtvKTiUB",
-    },
-    "bundle5": {
-        "repositories": 5,
-        "amount_cents": 2000,
-        "price_id": "price_1UFlncAyiOEDWiRnJzM9ewHX",
-    },
-}
+AUDIT_UNIT_PRICE_ID = "price_1UFlntAyiOEDWiRnVtvKTiUB"
+AUDIT_UNIT_CENTS = 500
 FREE_FINDINGS = 3
+MAX_REQUEST_BYTES = 1024 * 1024
 DEFAULT_SUCCESS_URL = (
     "https://pubskill.interdependentway.org/?session_id={CHECKOUT_SESSION_ID}"
 )
@@ -63,15 +55,33 @@ def validated_repo_urls(values, expected_count=None):
         raise ValueError("repository URLs must be a list")
 
     repo_urls = [str(value).strip() for value in values]
+    if not repo_urls:
+        raise ValueError("at least one repository URL is required")
     if expected_count is not None and len(repo_urls) != expected_count:
         raise ValueError(f"exactly {expected_count} repository URL(s) required")
-    if len(repo_urls) not in (1, 5):
-        raise ValueError("audit purchases support 1 or 5 repositories")
     if any(not valid_repo_url(value) for value in repo_urls):
         raise ValueError("supported public Git repository required")
     if len(set(repo_urls)) != len(repo_urls):
         raise ValueError("duplicate repository URLs are not allowed")
     return repo_urls
+
+
+def audit_pricing(repository_count):
+    if type(repository_count) is not int or repository_count < 1:
+        raise ValueError("repository count must be a positive integer")
+    free_count = repository_count // 5
+    paid_count = repository_count - free_count
+    return {
+        "repository_count": repository_count,
+        "free_count": free_count,
+        "paid_count": paid_count,
+        "amount_cents": paid_count * AUDIT_UNIT_CENTS,
+    }
+
+
+def repo_digest(repo_urls):
+    payload = json.dumps(repo_urls, ensure_ascii=False, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
 
 
 def run_audit(repo_url):
@@ -127,11 +137,9 @@ def stripe_api(path, form=None):
         return json.load(response)
 
 
-def create_checkout(repo_urls, tier):
-    config = AUDIT_TIERS.get(tier)
-    if config is None:
-        raise ValueError("unknown audit purchase")
-    repo_urls = validated_repo_urls(repo_urls, config["repositories"])
+def create_checkout(repo_urls):
+    repo_urls = validated_repo_urls(repo_urls)
+    pricing = audit_pricing(len(repo_urls))
 
     success_url = os.environ.get("PUBSKILL_SUCCESS_URL", DEFAULT_SUCCESS_URL)
     cancel_url = os.environ.get("PUBSKILL_CANCEL_URL", DEFAULT_CANCEL_URL)
@@ -139,27 +147,28 @@ def create_checkout(repo_urls, tier):
         ("mode", "payment"),
         ("success_url", success_url),
         ("cancel_url", cancel_url),
-        ("line_items[0][price]", config["price_id"]),
-        ("line_items[0][quantity]", "1"),
+        ("line_items[0][price]", AUDIT_UNIT_PRICE_ID),
+        ("line_items[0][quantity]", str(pricing["paid_count"])),
         ("client_reference_id", "pubskill-audit"),
         ("metadata[pubskill_product]", "audit"),
-        ("metadata[pubskill_tier]", tier),
-        ("metadata[repo_count]", str(config["repositories"])),
+        ("metadata[pricing_rule]", "every_fifth_free"),
+        ("metadata[repo_count]", str(pricing["repository_count"])),
+        ("metadata[paid_count]", str(pricing["paid_count"])),
+        ("metadata[free_count]", str(pricing["free_count"])),
+        ("metadata[repo_digest]", repo_digest(repo_urls)),
     ]
-    for index, repo_url in enumerate(repo_urls, start=1):
-        form.append((f"metadata[repo_{index}]", repo_url))
 
     session = stripe_api("checkout/sessions", form)
     if not session.get("id") or not session.get("url"):
         raise RuntimeError("checkout session did not return a payment URL")
-    return session
+    return session, pricing
 
 
 def stripe_session(session_id):
     return stripe_api(f"checkout/sessions/{quote(session_id, safe='')}")
 
 
-def paid_repos(session):
+def paid_order(session):
     if session.get("payment_status") != "paid" or session.get("status") != "complete":
         raise PermissionError("payment is not complete")
     if session.get("mode") != "payment":
@@ -170,21 +179,34 @@ def paid_repos(session):
     metadata = session.get("metadata") or {}
     if metadata.get("pubskill_product") != "audit":
         raise PermissionError("payment does not belong to this product")
+    if metadata.get("pricing_rule") != "every_fifth_free":
+        raise PermissionError("payment pricing rule is not recognized")
 
-    tier = metadata.get("pubskill_tier")
-    config = AUDIT_TIERS.get(tier)
-    if config is None:
-        raise PermissionError("payment tier is not recognized")
-    if session.get("currency") != "usd" or session.get("amount_total") != config["amount_cents"]:
-        raise PermissionError("payment amount does not match this product")
-    if metadata.get("repo_count") != str(config["repositories"]):
-        raise PermissionError("payment repository count does not match this product")
+    try:
+        repository_count = int(metadata.get("repo_count", ""))
+    except ValueError as exc:
+        raise PermissionError("payment repository count is invalid") from exc
+    pricing = audit_pricing(repository_count)
 
-    repo_urls = [
-        (metadata.get(f"repo_{index}") or "").strip()
-        for index in range(1, config["repositories"] + 1)
-    ]
-    return tier, validated_repo_urls(repo_urls, config["repositories"])
+    if metadata.get("paid_count") != str(pricing["paid_count"]):
+        raise PermissionError("payment paid-audit count does not match")
+    if metadata.get("free_count") != str(pricing["free_count"]):
+        raise PermissionError("payment free-audit count does not match")
+    if session.get("currency") != "usd" or session.get("amount_total") != pricing["amount_cents"]:
+        raise PermissionError("payment amount does not match this purchase")
+
+    digest = str(metadata.get("repo_digest") or "")
+    if len(digest) != 64:
+        raise PermissionError("payment repository binding is missing")
+    return pricing, digest
+
+
+def paid_repos(session, repo_urls):
+    pricing, expected_digest = paid_order(session)
+    repo_urls = validated_repo_urls(repo_urls, pricing["repository_count"])
+    if not hmac.compare_digest(repo_digest(repo_urls), expected_digest):
+        raise PermissionError("repository list does not match this purchase")
+    return pricing, repo_urls
 
 
 def operator_authorized(code):
@@ -214,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def request_json(self):
         length = int(self.headers.get("Content-Length", 0))
-        if length <= 0 or length > 16384:
+        if length <= 0 or length > MAX_REQUEST_BYTES:
             raise ValueError("invalid request")
         return json.loads(self.rfile.read(length))
 
@@ -223,29 +245,18 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/":
             return self.page()
 
-        if parsed.path == "/paid":
+        if parsed.path == "/paid-info":
             session_id = (parse_qs(parsed.query).get("session_id") or [""])[0]
             if not session_id:
                 return self.reply(400, {"error": "missing checkout session"})
             try:
-                session = stripe_session(session_id)
-                tier, repo_urls = paid_repos(session)
-                return self.reply(
-                    200,
-                    {
-                        "paid": True,
-                        "tier": tier,
-                        "repository_count": len(repo_urls),
-                        "audits": run_audit_batch(repo_urls),
-                    },
-                )
+                pricing, _ = paid_order(stripe_session(session_id))
+                return self.reply(200, pricing)
             except PermissionError as exc:
                 return self.reply(402, {"error": str(exc)})
-            except ValueError as exc:
-                return self.reply(400, {"error": str(exc)})
             except Exception as exc:
-                print(f"paid audit failure: {exc!r}", flush=True)
-                return self.reply(500, {"error": "paid audit could not be verified or completed"})
+                print(f"paid info failure: {exc!r}", flush=True)
+                return self.reply(500, {"error": "paid audit could not be verified"})
 
         return self.reply(404, {"error": "not found"})
 
@@ -280,17 +291,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/checkout":
             try:
                 body = self.request_json()
-                tier = str(body["tier"]).strip()
-                config = AUDIT_TIERS.get(tier)
-                if config is None:
-                    raise ValueError("unknown audit purchase")
-                repo_urls = validated_repo_urls(body["repo_urls"], config["repositories"])
-                session = create_checkout(repo_urls, tier)
+                repo_urls = validated_repo_urls(body["repo_urls"])
+                session, pricing = create_checkout(repo_urls)
                 return self.reply(
                     200,
                     {
                         "checkout_url": session["url"],
                         "session_id": session["id"],
+                        **pricing,
                     },
                 )
             except (ValueError, KeyError, json.JSONDecodeError) as exc:
@@ -299,18 +307,42 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"checkout failure: {exc!r}", flush=True)
                 return self.reply(500, {"error": "checkout could not be created"})
 
+        if path == "/paid":
+            try:
+                body = self.request_json()
+                session_id = str(body["session_id"]).strip()
+                if not session_id:
+                    raise ValueError("missing checkout session")
+                pricing, repo_urls = paid_repos(
+                    stripe_session(session_id),
+                    body["repo_urls"],
+                )
+                return self.reply(
+                    200,
+                    {
+                        "paid": True,
+                        **pricing,
+                        "audits": run_audit_batch(repo_urls),
+                    },
+                )
+            except PermissionError as exc:
+                return self.reply(402, {"error": str(exc)})
+            except (ValueError, KeyError, json.JSONDecodeError) as exc:
+                return self.reply(400, {"error": str(exc) or "invalid request"})
+            except Exception as exc:
+                print(f"paid audit failure: {exc!r}", flush=True)
+                return self.reply(500, {"error": "paid audit could not be verified or completed"})
+
         if path == "/operator/audit":
             try:
                 body = self.request_json()
                 if not operator_authorized(body.get("code")):
                     return self.reply(403, {"error": "access code not accepted"})
                 repo_urls = validated_repo_urls(body["repo_urls"])
-                tier = "single" if len(repo_urls) == 1 else "bundle5"
                 return self.reply(
                     200,
                     {
                         "operator": True,
-                        "tier": tier,
                         "repository_count": len(repo_urls),
                         "audits": run_audit_batch(repo_urls),
                     },
