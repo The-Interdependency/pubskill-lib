@@ -6,8 +6,8 @@ Clone this repo when you want a command that inspects a local repository and wri
 
 ## Status
 
-The inspect CLI version is `0.2.0`. Published versions and their immutable
-artifacts are listed on [GitHub Releases](https://github.com/The-Interdependency/pubskill-lib/releases).
+The current source version is `0.2.1`. Published versions and their immutable
+artifacts are listed on [GitHub Releases](https://github.com/The-Interdependency/pubskill-lib/releases); the already-published `v0.2.0` remains immutable.
 
 | Claim | State |
 |---|---|
@@ -59,7 +59,13 @@ The wheel retains its canonical skill-lib source pin without requiring a checkou
 
 Download the wheel, source archive, manifest, and `SHA256SUMS` from the chosen
 release. Verify the downloaded files with `sha256sum -c SHA256SUMS`, then install
-the verified wheel with `python -m pip install --no-deps ./pubskill_lib-0.2.0-py3-none-any.whl`.
+the verified wheel by substituting the chosen release version:
+
+```bash
+VERSION=0.2.0
+python -m pip install --no-deps "./pubskill_lib-${VERSION}-py3-none-any.whl"
+```
+
 Checksums establish byte identity; they are not a signature or a blanket health claim.
 
 ## Inspect CLI
