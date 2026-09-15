@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#090d18">
   <title>pubskill-lib · The Interdependent Way</title>
-  <meta name="description" content="Evidence-led repository audit and examination for public Git repositories.">
+  <meta name="description" content="Static repository inspection and structural examination for public Git repositories.">
   <link rel="stylesheet" href="https://interdependentway.org/assets/css/site.css">
   <style>
     .pubskill-shell { max-width: 62rem; margin: 0 auto; }
@@ -20,14 +20,13 @@
     .choice-card .actions { margin-top: auto; }
     .choice-card[aria-current="true"] { border-color: var(--violet); box-shadow: var(--shadow); }
     .product-panel { margin-top: 1.5rem; }
-    .product-panel[hidden], .quantity-panel[hidden], .operator-panel[hidden], .recovery-panel[hidden] { display: none; }
-    .audit-panel { padding: clamp(1.2rem, 4vw, 2rem); background: linear-gradient(145deg, rgba(22,33,58,.9), rgba(16,24,42,.86)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-    .audit-panel label, .operator-panel label { display: block; margin: .8rem 0 .4rem; color: var(--cyan); font: 700 .76rem/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .12em; }
-    .repo-field, .code-field, .count-field { width: 100%; min-height: 3.2rem; padding: .8rem .95rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--night); color: var(--starlight); font: inherit; }
-    .repo-field::placeholder, .code-field::placeholder { color: #6f7d98; }
-    .repo-field:focus, .code-field:focus, .count-field:focus { border-color: var(--violet); outline: 3px solid rgba(155,135,245,.18); outline-offset: 2px; }
-    .count-field { max-width: 9rem; }
-    .audit-actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+    .product-panel[hidden] { display: none; }
+    .run-panel { padding: clamp(1.2rem, 4vw, 2rem); background: linear-gradient(145deg, rgba(22,33,58,.9), rgba(16,24,42,.86)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .run-panel label { display: block; margin: .8rem 0 .4rem; color: var(--cyan); font: 700 .76rem/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .12em; }
+    .repo-field { width: 100%; min-height: 3.2rem; padding: .8rem .95rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--night); color: var(--starlight); font: inherit; }
+    .repo-field::placeholder { color: #6f7d98; }
+    .repo-field:focus { border-color: var(--violet); outline: 3px solid rgba(155,135,245,.18); outline-offset: 2px; }
+    .actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
     button.button { cursor: pointer; font: inherit; }
     #status { min-height: 1.6rem; margin: 1rem 0 0; color: var(--silver); }
     #out { margin-top: 2rem; }
@@ -37,17 +36,13 @@
     .finding p { color: var(--starlight); }
     .meta { color: var(--silver); font-size: .88rem; overflow-wrap: anywhere; }
     .support-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+    .boundary-note { margin-top: 1rem; }
+    .scope-note { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: .7rem; }
+    details.hmmm { margin-top: 1rem; }
+    details.hmmm summary { cursor: pointer; font-weight: 700; }
+    details.hmmm li { margin: .55rem 0; }
     .examiner-choices { margin-top: 1rem; }
     .examiner-choices .card { min-height: 11rem; }
-    .boundary-note { margin-top: 1rem; }
-    .quantity-choices .card { min-height: 11rem; }
-    .quantity-panel { margin-top: 1rem; }
-    .access-row { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
-    .batch-result { margin: 1rem 0 1.5rem; }
-    .price-line { color: var(--cyan); font-weight: 700; margin: .8rem 0; }
-    .promo-line { color: var(--silver); }
-    .repo-fields { display: grid; gap: .35rem; margin-top: .8rem; }
-    .site-footer a { color: var(--silver); }
     @media (max-width: 780px) {
       .pubskill-head h1 { font-size: clamp(2.55rem, 13vw, 4.2rem); }
       .choice-grid { grid-template-columns: 1fr; }
@@ -75,16 +70,16 @@
       <section class="pubskill-head">
         <p class="eyebrow">pubskill-lib · repository evidence</p>
         <h1>What do you need to know?</h1>
-        <p class="lede">Choose the question first. pubskill keeps each decision surface to two options.</p>
+        <p class="lede">Choose the question first. Each surface states what it can and cannot prove.</p>
       </section>
 
       <section class="choice-grid" aria-label="pubskill products">
-        <article class="card choice-card" id="audit-choice" aria-current="true">
-          <p class="eyebrow">Audit</p>
-          <h2>Repository Audit</h2>
-          <p class="question">Which repository claims hold up, and which fail against the evidence?</p>
-          <p>Three findings are free for one repository. Complete audits start at $5.</p>
-          <div class="actions"><button class="button" id="choose-audit" type="button">Audit</button></div>
+        <article class="card choice-card" id="inspect-choice" aria-current="true">
+          <p class="eyebrow">Inspection</p>
+          <h2>Repository Inspection</h2>
+          <p class="question">What obvious repository defects and unresolved static boundaries can be found without executing it?</p>
+          <p>Free static inspection. It does not install dependencies, run tests, execute repository code, or verify runtime behavior.</p>
+          <div class="actions"><button class="button" id="choose-inspect" type="button">Inspect</button></div>
         </article>
 
         <article class="card choice-card" id="examiner-choice">
@@ -96,11 +91,11 @@
         </article>
       </section>
 
-      <section class="product-panel" id="audit-panel" aria-labelledby="audit-title">
+      <section class="product-panel" id="inspect-panel" aria-labelledby="inspect-title">
         <div class="page-head">
-          <p class="eyebrow">Audit</p>
-          <h2 id="audit-title">Which repository claims hold up, and which fail against the evidence?</h2>
-          <p class="promo-line">Complete audits start at $5. Choose the number of repositories to see the total.</p>
+          <p class="eyebrow">Inspection</p>
+          <h2 id="inspect-title">Static evidence, without pretending it is runtime proof.</h2>
+          <p class="section-intro">The inspector checks repository identity and selected static surfaces such as broken local links, obvious CI no-ops, missing declared Python entry points, and directly referenced local script targets.</p>
           <div class="support-row" aria-label="Supported Git hosts">
             <span class="status status-public">GitHub</span>
             <span class="status status-public">GitLab</span>
@@ -110,69 +105,18 @@
           </div>
         </div>
 
-        <div class="choice-grid quantity-choices" aria-label="Audit quantity">
-          <article class="card choice-card" id="single-choice" aria-current="true">
-            <p class="eyebrow">One repository</p>
-            <h3>$5 full audit</h3>
-            <p>Run the three-finding preview first, then unlock the complete result.</p>
-            <div class="actions"><button class="button" id="choose-single" type="button">1 repository</button></div>
-          </article>
-          <article class="card choice-card" id="multiple-choice">
-            <p class="eyebrow">Multiple repositories</p>
-            <h3>Choose any quantity</h3>
-            <p>Choose the number of repositories. Your total updates automatically.</p>
-            <div class="actions"><button class="button secondary" id="choose-multiple" type="button">Multiple repositories</button></div>
-          </article>
+        <div class="run-panel">
+          <label for="repo">Public Git repository URL</label>
+          <input class="repo-field" id="repo" inputmode="url" autocomplete="url" placeholder="https://github.com/owner/repo.git">
+          <div class="actions">
+            <button class="button" id="inspect" type="button">Run free inspection</button>
+          </div>
         </div>
 
-        <section class="quantity-panel" id="single-panel">
-          <div class="audit-panel">
-            <label for="repo">Public Git repository URL</label>
-            <input class="repo-field" id="repo" inputmode="url" autocomplete="url" placeholder="https://github.com/owner/repo.git">
-            <div class="audit-actions">
-              <button class="button" id="audit" type="button">Run free audit</button>
-            </div>
-            <div class="access-row">
-              <p class="eyebrow">Complete audit</p>
-              <div class="audit-actions">
-                <button class="button" id="pay-single" type="button">Pay $5</button>
-                <button class="button secondary" id="code-single" type="button">Use access code</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="quantity-panel" id="multiple-panel" hidden>
-          <div class="audit-panel">
-            <label for="audit-count">Number of repositories</label>
-            <input class="count-field" id="audit-count" type="number" min="2" step="1" value="5" inputmode="numeric">
-            <p class="price-line" id="price-summary"></p>
-            <div class="repo-fields" id="multiple-fields"></div>
-            <div class="access-row">
-              <div class="audit-actions">
-                <button class="button" id="pay-multiple" type="button">Pay</button>
-                <button class="button secondary" id="code-multiple" type="button">Use access code</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="operator-panel panel" id="operator-panel" hidden>
-          <p class="eyebrow">Operator access</p>
-          <label for="operator-code">Access code</label>
-          <input class="code-field" id="operator-code" type="password" autocomplete="off" placeholder="Enter access code">
-          <div class="audit-actions">
-            <button class="button" id="run-operator" type="button">Run full audit</button>
-            <button class="button secondary" id="cancel-operator" type="button">Cancel</button>
-          </div>
-        </section>
-
-        <section class="recovery-panel panel" id="recovery-panel" hidden>
-          <p class="eyebrow">Paid audit recovery</p>
-          <p id="recovery-copy"></p>
-          <div class="repo-fields" id="recovery-fields"></div>
-          <div class="audit-actions"><button class="button" id="recover-paid" type="button">Run purchased audits</button></div>
-        </section>
+        <div class="hmmm boundary-note">
+          <h3>hmmm — repository audit</h3>
+          <p>A true repository audit is not offered yet. It requires isolated execution of applicable repository gates plus reproducible receipts. Static inspection remains useful, but it is not that.</p>
+        </div>
 
         <div id="status" role="status" aria-live="polite"></div>
         <div id="out"></div>
@@ -200,7 +144,7 @@
 
         <div class="hmmm boundary-note">
           <h3>hmmm</h3>
-          <p>The Examiner CLI is available now. Hosted Examiner pricing and metering remain unresolved until measured from real repository runs; they are not guessed here.</p>
+          <p>The Examiner CLI is available now. Hosted Examiner execution, pricing, and metering remain unresolved until measured from real repository runs.</p>
         </div>
       </section>
     </div>
@@ -218,95 +162,18 @@
     const repo = document.getElementById("repo");
     const status = document.getElementById("status");
     const out = document.getElementById("out");
-    const auditPanel = document.getElementById("audit-panel");
+    const inspectPanel = document.getElementById("inspect-panel");
     const examinerPanel = document.getElementById("examiner-panel");
-    const auditChoice = document.getElementById("audit-choice");
+    const inspectChoice = document.getElementById("inspect-choice");
     const examinerChoice = document.getElementById("examiner-choice");
-    const singleChoice = document.getElementById("single-choice");
-    const multipleChoice = document.getElementById("multiple-choice");
-    const singlePanel = document.getElementById("single-panel");
-    const multiplePanel = document.getElementById("multiple-panel");
-    const auditCount = document.getElementById("audit-count");
-    const multipleFields = document.getElementById("multiple-fields");
-    const priceSummary = document.getElementById("price-summary");
-    const operatorPanel = document.getElementById("operator-panel");
-    const operatorCode = document.getElementById("operator-code");
-    const recoveryPanel = document.getElementById("recovery-panel");
-    const recoveryFields = document.getElementById("recovery-fields");
-    const recoveryCopy = document.getElementById("recovery-copy");
-    let activeQuantityMode = "single";
-    let paidRecoverySession = "";
-
-    function pricingFor(count) {
-      const free = Math.floor(count / 5);
-      const paid = count - free;
-      return {count, free, paid, dollars: paid * 5};
-    }
-
-    function validCount() {
-      const value = Number(auditCount.value);
-      if (!Number.isInteger(value) || value < 2) throw new Error("Choose at least 2 repositories.");
-      return value;
-    }
-
-    function buildRepoFields(container, count, className, existing = []) {
-      const values = existing.length ? existing : [...container.querySelectorAll("input")].map(input => input.value);
-      container.replaceChildren();
-      for (let index = 1; index <= count; index += 1) {
-        const label = document.createElement("label");
-        const id = `${className}-${index}`;
-        label.htmlFor = id;
-        label.textContent = `Repository ${index}`;
-        const input = document.createElement("input");
-        input.className = `repo-field ${className}`;
-        input.id = id;
-        input.inputMode = "url";
-        input.autocomplete = "url";
-        input.placeholder = `https://github.com/owner/repo-${index}.git`;
-        input.value = values[index - 1] || "";
-        container.append(label, input);
-      }
-    }
-
-    function updateMultipleFields() {
-      try {
-        const count = validCount();
-        buildRepoFields(multipleFields, count, "multiple-repo");
-        const price = pricingFor(count);
-        priceSummary.textContent = `${count} complete audits · $${price.dollars} total`;
-        document.getElementById("pay-multiple").textContent = `Pay $${price.dollars}`;
-      } catch (error) {
-        priceSummary.textContent = error.message;
-      }
-    }
 
     function selectProduct(product) {
-      const auditSelected = product === "audit";
-      auditPanel.hidden = !auditSelected;
-      examinerPanel.hidden = auditSelected;
-      auditChoice.setAttribute("aria-current", String(auditSelected));
-      examinerChoice.setAttribute("aria-current", String(!auditSelected));
-      (auditSelected ? auditPanel : examinerPanel).scrollIntoView({behavior: "smooth", block: "start"});
-    }
-
-    function selectQuantityMode(mode) {
-      activeQuantityMode = mode;
-      const single = mode === "single";
-      singlePanel.hidden = !single;
-      multiplePanel.hidden = single;
-      singleChoice.setAttribute("aria-current", String(single));
-      multipleChoice.setAttribute("aria-current", String(!single));
-      operatorPanel.hidden = true;
-      recoveryPanel.hidden = true;
-      operatorCode.value = "";
-      status.textContent = "";
-      out.replaceChildren();
-      if (!single) updateMultipleFields();
-    }
-
-    function repoUrlsForMode(mode = activeQuantityMode) {
-      if (mode === "single") return [repo.value.trim()];
-      return [...document.querySelectorAll(".multiple-repo")].map(input => input.value.trim());
+      const inspectSelected = product === "inspect";
+      inspectPanel.hidden = !inspectSelected;
+      examinerPanel.hidden = inspectSelected;
+      inspectChoice.setAttribute("aria-current", String(inspectSelected));
+      examinerChoice.setAttribute("aria-current", String(!inspectSelected));
+      (inspectSelected ? inspectPanel : examinerPanel).scrollIntoView({behavior: "smooth", block: "start"});
     }
 
     function add(tag, text, parent = out, className = "") {
@@ -332,216 +199,63 @@
       parent.appendChild(card);
     }
 
-    function renderFullResult(result, parent) {
-      add("h3", result.target?.remote || "Repository", parent);
-      add("p", `Commit: ${result.target?.commit || "unknown"}`, parent, "meta");
-      add("p", `${result.findings?.length || 0} findings`, parent);
-      for (const finding of result.findings || []) renderFinding(finding, parent);
-      if (result.hmmm?.length) {
-        const boundary = document.createElement("section");
-        boundary.className = "hmmm";
-        add("h3", "hmmm", boundary);
+    function renderInspection(result) {
+      clearResults();
+      add("p", "static inspection", out, "eyebrow");
+      add("h2", result.target?.remote || "Repository");
+      add("p", `Commit: ${result.target?.commit || "unknown"}`, out, "meta");
+
+      const scope = document.createElement("section");
+      scope.className = "scope-note";
+      add("strong", "Scope", scope);
+      add("p", "No target dependencies were installed. No target code or tests were executed. Runtime behavior was not verified.", scope);
+      out.appendChild(scope);
+
+      const findings = result.findings || [];
+      add("h3", `${findings.length} static finding${findings.length === 1 ? "" : "s"}`);
+      if (!findings.length) {
+        add("p", "No finding was produced by the implemented static checks. That is not proof that the repository is healthy.");
+      }
+      for (const finding of findings) renderFinding(finding, out);
+
+      const unresolved = result.hmmm || [];
+      if (unresolved.length) {
+        const details = document.createElement("details");
+        details.className = "hmmm";
+        const summary = document.createElement("summary");
+        summary.textContent = `hmmm — ${unresolved.length} unresolved static boundar${unresolved.length === 1 ? "y" : "ies"}`;
+        details.appendChild(summary);
         const list = document.createElement("ul");
-        for (const item of result.hmmm) add("li", item, list);
-        boundary.appendChild(list);
-        parent.appendChild(boundary);
+        for (const item of unresolved) add("li", item, list);
+        details.appendChild(list);
+        out.appendChild(details);
       }
     }
 
-    function renderBatch(payload) {
+    async function runInspection() {
       clearResults();
-      add("p", payload.operator ? "operator audit" : "paid audit", out, "eyebrow");
-      add("h2", `${payload.repository_count} complete audit${payload.repository_count === 1 ? "" : "s"}`);
-      for (const item of payload.audits || []) {
-        const section = document.createElement("section");
-        section.className = "panel batch-result";
-        if (item.error) {
-          add("h3", item.repo_url, section);
-          add("p", item.error, section);
-        } else {
-          renderFullResult(item.result, section);
-        }
-        out.appendChild(section);
-      }
-    }
-
-    function renderPreview(r) {
-      clearResults();
-      add("p", "free preview", out, "eyebrow");
-      add("h2", r.target?.remote || "Repository");
-      add("p", `Commit: ${r.target?.commit || "unknown"}`, out, "meta");
-      add("h3", `${r.total_findings ?? r.findings?.length ?? 0} findings total`);
-      for (const finding of r.findings || []) renderFinding(finding, out);
-      if (r.locked) {
-        const gate = document.createElement("section");
-        gate.className = "panel";
-        add("h3", "Full audit", gate);
-        add("p", `Preview shows the first ${r.findings.length}. The complete audit also includes remaining findings and ${r.hmmm_count || 0} unresolved constraint(s).`, gate);
-        const actions = document.createElement("div");
-        actions.className = "audit-actions";
-        const pay = document.createElement("button");
-        pay.className = "button";
-        pay.type = "button";
-        pay.textContent = "Pay $5";
-        pay.addEventListener("click", () => startCheckout([repo.value.trim()]));
-        const code = document.createElement("button");
-        code.className = "button secondary";
-        code.type = "button";
-        code.textContent = "Use access code";
-        code.addEventListener("click", () => showOperator("single"));
-        actions.append(pay, code);
-        gate.appendChild(actions);
-        out.appendChild(gate);
-      }
-    }
-
-    async function runAudit() {
-      clearResults();
-      status.textContent = "Running audit…";
+      status.textContent = "Running static inspection…";
       try {
-        const response = await fetch("/audit", {
+        const response = await fetch("/inspect", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({repo_url: repo.value})
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Audit failed");
-        renderPreview(result);
+        if (!response.ok) throw new Error(result.error || "Inspection failed");
+        renderInspection(result);
       } catch (error) {
         clearResults();
         status.textContent = error.message;
       }
     }
 
-    async function startCheckout(repoUrls) {
-      clearResults();
-      status.textContent = "Creating checkout…";
-      try {
-        const response = await fetch("/checkout", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({repo_urls: repoUrls})
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Checkout failed");
-        sessionStorage.setItem("pubskill_pending_repos", JSON.stringify(repoUrls));
-        location.assign(result.checkout_url);
-      } catch (error) {
-        status.textContent = error.message;
-      }
-    }
-
-    function showOperator(mode) {
-      activeQuantityMode = mode;
-      operatorPanel.hidden = false;
-      operatorCode.focus();
-      operatorPanel.scrollIntoView({behavior: "smooth", block: "center"});
-    }
-
-    async function runOperator() {
-      clearResults();
-      status.textContent = "Running full audit…";
-      try {
-        const response = await fetch("/operator/audit", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
-            code: operatorCode.value,
-            repo_urls: repoUrlsForMode()
-          })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Operator audit failed");
-        operatorCode.value = "";
-        operatorPanel.hidden = true;
-        renderBatch(result);
-      } catch (error) {
-        status.textContent = error.message;
-      }
-    }
-
-    async function submitPaid(sessionId, repoUrls) {
-      const response = await fetch("/paid", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({session_id: sessionId, repo_urls: repoUrls})
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Paid audit failed");
-      sessionStorage.removeItem("pubskill_pending_repos");
-      renderBatch(result);
-      history.replaceState({}, "", "/");
-    }
-
-    async function loadPaid(sessionId) {
-      selectProduct("audit");
-      clearResults();
-      status.textContent = "Verifying payment…";
-      let stored = null;
-      try {
-        stored = JSON.parse(sessionStorage.getItem("pubskill_pending_repos") || "null");
-      } catch (_) {
-        stored = null;
-      }
-      if (Array.isArray(stored) && stored.length) {
-        try {
-          status.textContent = "Verifying payment and running audits…";
-          await submitPaid(sessionId, stored);
-          return;
-        } catch (error) {
-          status.textContent = error.message;
-          return;
-        }
-      }
-
-      try {
-        const response = await fetch(`/paid-info?session_id=${encodeURIComponent(sessionId)}`);
-        const info = await response.json();
-        if (!response.ok) throw new Error(info.error || "Paid audit could not be recovered");
-        paidRecoverySession = sessionId;
-        recoveryPanel.hidden = false;
-        recoveryCopy.textContent = `Payment covers ${info.repository_count} repository audit${info.repository_count === 1 ? "" : "s"}. Re-enter the same repository URL${info.repository_count === 1 ? "" : "s"} to verify the purchase binding.`;
-        buildRepoFields(recoveryFields, info.repository_count, "recovery-repo", []);
-        status.textContent = "Payment verified. Repository list needs to be restored.";
-      } catch (error) {
-        status.textContent = error.message;
-      }
-    }
-
-    async function recoverPaid() {
-      const repoUrls = [...document.querySelectorAll(".recovery-repo")].map(input => input.value.trim());
-      try {
-        status.textContent = "Verifying repository list and running audits…";
-        await submitPaid(paidRecoverySession, repoUrls);
-        recoveryPanel.hidden = true;
-      } catch (error) {
-        status.textContent = error.message;
-      }
-    }
-
-    document.getElementById("choose-audit").addEventListener("click", () => selectProduct("audit"));
+    document.getElementById("choose-inspect").addEventListener("click", () => selectProduct("inspect"));
     document.getElementById("choose-examiner").addEventListener("click", () => selectProduct("examiner"));
-    document.getElementById("choose-single").addEventListener("click", () => selectQuantityMode("single"));
-    document.getElementById("choose-multiple").addEventListener("click", () => selectQuantityMode("multiple"));
-    document.getElementById("audit").addEventListener("click", runAudit);
-    document.getElementById("pay-single").addEventListener("click", () => startCheckout([repo.value.trim()]));
-    document.getElementById("pay-multiple").addEventListener("click", () => startCheckout(repoUrlsForMode("multiple")));
-    document.getElementById("code-single").addEventListener("click", () => showOperator("single"));
-    document.getElementById("code-multiple").addEventListener("click", () => showOperator("multiple"));
-    document.getElementById("run-operator").addEventListener("click", runOperator);
-    document.getElementById("cancel-operator").addEventListener("click", () => {
-      operatorPanel.hidden = true;
-      operatorCode.value = "";
-    });
-    document.getElementById("recover-paid").addEventListener("click", recoverPaid);
-    auditCount.addEventListener("input", updateMultipleFields);
+    document.getElementById("inspect").addEventListener("click", runInspection);
     repo.addEventListener("keydown", event => {
-      if (event.key === "Enter") runAudit();
+      if (event.key === "Enter") runInspection();
     });
-
-    updateMultipleFields();
-    const sessionId = new URLSearchParams(location.search).get("session_id");
-    if (sessionId) loadPaid(sessionId);
   </script>
 </body>
 </html>
