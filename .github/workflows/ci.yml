@@ -45,7 +45,9 @@ jobs:
           /tmp/pubskill-wheel-venv/bin/python -m pip install --no-deps --force-reinstall /tmp/pubskill-release-a/*.whl
           mkdir /tmp/pubskill-replay
           tar -xzf /tmp/pubskill-release-a/*.tar.gz -C /tmp/pubskill-replay
-          cd /tmp/pubskill-replay/pubskill_lib-0.2.0
+          mapfile -t sdist_roots < <(find /tmp/pubskill-replay -mindepth 1 -maxdepth 1 -type d -name 'pubskill_lib-*' -print)
+          test "${#sdist_roots[@]}" -eq 1
+          cd "${sdist_roots[0]}"
           /tmp/pubskill-wheel-venv/bin/python -m unittest discover -s tests
           /tmp/pubskill-wheel-venv/bin/python -m pubskill_lib.audit examples/neglected-repo --out /tmp/release-findings.json
           /tmp/pubskill-wheel-venv/bin/python -c "import json; from pubskill_lib.audit import _read_source_pin; assert json.load(open('/tmp/release-findings.json'))['source_pin'] == _read_source_pin() != 'hmmm'"
