@@ -4,8 +4,8 @@ Canon: https://github.com/The-Interdependency/skill-lib
 
 | Field | Value |
 |---|---|
-| Pinned SHA | `8de4f12d0f31ff94f41e4a0196c447c0cbe20faf` |
-| Pinned date | 2026-09-11 |
+| Pinned SHA | `9867ab33877f2b1f50f8a501cf379aa99360bd52` |
+| Pinned date | 2026-10-05 |
 | Pin meaning | exact canonical source used for the vendored public skill slice |
 | Runnable subset | `msdmd` (runnable), `repo-audit-repair` (contract) |
 

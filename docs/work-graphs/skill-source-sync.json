@@ -1,0 +1,29 @@
+{
+  "schema": "the-interdependency.stack-manifest",
+  "version": "1.0.0",
+  "repositories": [
+    {
+      "repository": "The-Interdependency/skill-lib",
+      "commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "authority": "Canonical public skill text, MSDMD implementation and reader contracts",
+      "relation": "Producer of the exact msdmd and repo-audit-repair public slice"
+    },
+    {
+      "repository": "The-Interdependency/pubskill-lib",
+      "commit": "06d8efa1c4200a08e60ea61cec088ef18236b631",
+      "authority": "Public distribution, CLI, packaging, fixtures and hosted integration",
+      "relation": "Pre-update consumer source; this transaction refreshes its canonical public slice"
+    }
+  ],
+  "boundaries": {
+    "authority_transfer": false,
+    "proof_status_transfer": false,
+    "measurement_status_transfer": false,
+    "semantic_mapping": "external-provenance",
+    "agent_scope": "cross-repository-work-graph",
+    "hmmm": [
+      "Source propagation does not establish release or live deployment. The hosted MSDMD service and MCP adapter remain separate work; no certification or empirical validity transfers."
+    ]
+  },
+  "work_graph_sha256": "873e961ad5f2d018a700972c4aa5240788c087e91770d7a56be2338d5fd06c32"
+}
