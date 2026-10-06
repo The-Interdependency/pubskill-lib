@@ -12,10 +12,11 @@ as native schema-2 collections.
 ## Reproduce propagation
 
 Resolve and validate an exact merged skill-lib commit first. With clean adjacent
-checkouts, use that immutable commit instead of an unpinned branch:
+checkouts, use that immutable commit instead of an unpinned branch. This example
+replays the current publication pin; select a newly verified SHA for a later update:
 
 ```bash
-PIN=<40-character-verified-skill-lib-commit>
+PIN=$(python -c 'import json; print(json.load(open("src/pubskill_lib/_source.json"))["commit"])')
 git -C ../skill-lib checkout --detach "$PIN"
 python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair
 python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair --apply
@@ -23,12 +24,13 @@ cp ../skill-lib/msdmd/parsers/universal.py src/pubskill_lib/_msdmd_universal.py
 ```
 
 In the same commit, update `SOURCE.md` (SHA and source commit date),
-`src/pubskill_lib/_source.json`, and the source participant in
-`docs/work-graphs/skill-source-sync.json`. The propagation tool updates
-`.agents/skills/README.md`. Recompute the graph digest over exactly `repositories`
-and `boundaries`, using sorted JSON keys and compact separators. Keep participant
-order stable. The PubSkill participant identifies the pre-update consumer source,
-not a self-referential final commit.
+`src/pubskill_lib/_source.json`, `examples/neglected-repo/expected-findings.json`
+(source_pin only; preserve the fixture's expected defects), and the source
+participant in `docs/work-graphs/skill-source-sync.json`. The propagation tool
+updates `.agents/skills/README.md`. Recompute the graph digest over exactly
+`repositories` and `boundaries`, using sorted JSON keys and compact separators.
+Keep participant order stable. The PubSkill participant identifies the pre-update
+consumer source, not a self-referential final commit.
 
 ## Verification
 
