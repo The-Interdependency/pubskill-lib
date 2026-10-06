@@ -26,11 +26,13 @@ cp ../skill-lib/msdmd/parsers/universal.py src/pubskill_lib/_msdmd_universal.py
 In the same commit, update `SOURCE.md` (SHA and source commit date),
 `src/pubskill_lib/_source.json`, `examples/neglected-repo/expected-findings.json`
 (source_pin only; preserve the fixture's expected defects), and the source
-participant in `docs/work-graphs/skill-source-sync.json`. The propagation tool
-updates `.agents/skills/README.md`. Recompute the graph digest over exactly
-`repositories` and `boundaries`, using sorted JSON keys and compact separators.
-Keep participant order stable. The PubSkill participant identifies the pre-update
-consumer source, not a self-referential final commit.
+participant in `docs/work-graphs/skill-source-sync.json`. Update the explicit
+canonical checkout revision in `.github/workflows/skill-source.yml` as well:
+this is a separately reviewed trust anchor, not a PR-supplied checkout parameter.
+The propagation tool updates `.agents/skills/README.md`. Recompute the graph digest
+over exactly `repositories` and `boundaries`, using sorted JSON keys and compact
+separators. Keep participant order stable. The PubSkill participant identifies the
+pre-update consumer source, not a self-referential final commit.
 
 ## Verification
 
@@ -40,11 +42,12 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
 ```
 
-The `canonical-source` CI job checks out the exact producer pin and compares both
-complete skill trees, shared doctrine and the packaged parser. It does not rewrite
-source before checking it. Existing CI separately exercises Python 3.11/3.12,
-clean-wheel behavior, reproducible release archives and source-distribution replay.
-New regression tests exercise the actual vendored Python native reader, prove that
+The `canonical-source` CI job checks out its explicit trusted producer pin,
+rejects publication metadata that differs, and compares both complete skill trees,
+shared doctrine and the packaged parser. It does not rewrite source before
+checking it. Existing CI separately exercises Python 3.11/3.12, clean-wheel
+behavior, reproducible release archives and source-distribution replay. New
+regression tests exercise the actual vendored Python native reader, prove that
 inspected code is not executed, and require stale projections to fail verification.
 
 The schema-2 collector and optional parser-runtime declarations now travel with
