@@ -1,0 +1,8 @@
+[project]
+name = "metadata-repo-fixture"
+version = "1.0.0"
+description = "End-to-end MSDMD collection fixture"
+requires-python = ">=3.11"
+
+[project.scripts]
+metadata-fixture = "example:main"

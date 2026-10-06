@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from pubskill_lib import api
+from pubskill_lib import api, mcp_server
 from pubskill_lib.acquisition import AcquisitionError, acquire_repository, valid_repo_url
 from pubskill_lib.audit import audit_path
 from pubskill_lib.collections import CollectionError
@@ -133,6 +133,21 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 print(f"inspection failure: {exc!r}", flush=True)
                 return self.reply(500, {"error": "inspection failed"})
+
+        if path == "/mcp":
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if length <= 0 or length > 4 * 1024 * 1024:
+                return self.reply(400, {"error": "invalid request body"})
+            status, content_type, data = mcp_server.handle_http_bytes(
+                self.rfile.read(length), self.headers.get("Accept", "")
+            )
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
 
         if path in {"/audit", "/checkout", "/paid", "/operator/audit"}:
             return self.reply(

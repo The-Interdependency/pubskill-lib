@@ -1,0 +1,8 @@
+{
+  "name": "metadata-repo-fixture",
+  "version": "1.0.0",
+  "description": "End-to-end MSDMD collection fixture",
+  "scripts": {
+    "check": "node --check index.js"
+  }
+}

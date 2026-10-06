@@ -24,6 +24,32 @@ temporary worktree is deleted after the receipt is built. Target code is never
 installed, executed, or instructed. Schema-1 `/inspect` and schema-2 MSDMD
 collection remain separate contracts; neither is coerced into the other.
 
+## MCP surface
+
+`POST /mcp` speaks MCP Streamable HTTP (specification `2025-11-25`) as a
+stateless JSON transport. The same application layer backs every tool; the MCP
+adapter maintains no second catalog:
+
+- `pubskill_identity`
+- `pubskill_list_skills`
+- `pubskill_get_skill`
+- `pubskill_get_resource`
+- `pubskill_collect_metadata`
+- `pubskill_query_metadata`
+- `pubskill_resolve_skills`
+
+Requests must send `Accept: application/json, text/event-stream`. A local
+client suitable for demonstrations (no Alexa+ tooling required):
+
+```bash
+python -m pubskill_lib.mcp_server --self-test
+python tools/mcp_client.py --url http://127.0.0.1:8080/mcp
+```
+
+The end-to-end fixture `examples/metadata-repo` records an exact, replayable
+schema-2 collection (`expected-collection.json`); the canonical-source gate
+replays it byte for byte with `--snapshot-identity --strict --json --check`.
+
 ## Repository inspection
 
 Hosted inspection is **free**.
