@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -40,11 +41,131 @@ class SkillSourceTests(unittest.TestCase):
             (SKILLS / "msdmd/parsers/universal.py").read_bytes(),
         )
 
-    def test_public_slice_does_not_expand_into_org_skills(self):
-        self.assertEqual(
-            {path.parent.name for path in SKILLS.glob("*/SKILL.md")},
-            {"msdmd", "repo-audit-repair"},
-        )
+    def test_installed_skills_match_pinned_producer_index(self):
+        index = json.loads((SKILLS / "skills.json").read_text(encoding="utf-8"))
+        expected = {entry["name"] for entry in index["skills"]}
+        self.assertEqual(len(expected), 44)
+        installed = {
+            path.parent.name
+            for path in SKILLS.glob("*/SKILL.md")
+            if path.parent.name != "doctrine"
+        }
+        self.assertEqual(installed, expected)
+        for entry in index["skills"]:
+            self.assertEqual(entry["path"], f"{entry['name']}/SKILL.md")
+            self.assertTrue((SKILLS / entry["name"] / "SKILL.md").is_file())
+
+    def test_catalog_manifest_replays_byte_for_byte(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / "catalog.json"
+            command = [
+                sys.executable,
+                str(ROOT / "tools" / "build_catalog.py"),
+                "--out",
+                str(out),
+            ]
+            result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(out.read_bytes(), (SKILLS / "catalog.json").read_bytes())
+
+    def test_catalog_binds_every_skill_to_source_commit_and_digest(self):
+        index = json.loads((SKILLS / "skills.json").read_text(encoding="utf-8"))
+        catalog = json.loads((SKILLS / "catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["schema"], "pubskill-lib.catalog")
+        self.assertEqual(catalog["version"], 1)
+        self.assertEqual(catalog["producer"]["commit"], _read_source_pin())
+        self.assertEqual(catalog["skill_count"], len(index["skills"]))
+        by_name = {item["name"]: item for item in catalog["skills"]}
+        self.assertEqual(set(by_name), {entry["name"] for entry in index["skills"]})
+        for entry in index["skills"]:
+            item = by_name[entry["name"]]
+            self.assertEqual(item["source_commit"], _read_source_pin())
+            self.assertRegex(item["digest"], r"^[0-9a-f]{64}$")
+            self.assertEqual(item["kind"], entry.get("kind"))
+            self.assertEqual(item["status"], entry.get("status"))
+            self.assertEqual(item["path"], entry["path"])
+
+    def test_parity_gate_fails_when_vendored_skill_bytes_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            install = root / "skills"
+            shutil.copytree(SKILLS, install)
+            target = install / "msdmd" / "SKILL.md"
+            target.write_text(
+                target.read_text(encoding="utf-8") + "\n# drift\n", encoding="utf-8"
+            )
+            out = root / "catalog.json"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools" / "build_catalog.py"),
+                    "--skills-root",
+                    str(install),
+                    "--source-json",
+                    str(ROOT / "src" / "pubskill_lib" / "_source.json"),
+                    "--out",
+                    str(out),
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            mutated = json.loads(out.read_text(encoding="utf-8"))
+            committed = json.loads((SKILLS / "catalog.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(
+                mutated["propagated_set_digest"], committed["propagated_set_digest"]
+            )
+
+    def test_parity_gate_fails_on_removed_or_added_producer_skills(self):
+        source_json = ROOT / "src" / "pubskill_lib" / "_source.json"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            removed_root = root / "removed"
+            shutil.copytree(SKILLS, removed_root)
+            shutil.rmtree(removed_root / "msdmd")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools" / "build_catalog.py"),
+                    "--skills-root",
+                    str(removed_root),
+                    "--source-json",
+                    str(source_json),
+                    "--out",
+                    str(root / "removed-catalog.json"),
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing SKILL.md", result.stderr)
+
+            added_root = root / "added"
+            shutil.copytree(SKILLS, added_root)
+            (added_root / "not-in-producer-index").mkdir()
+            (added_root / "not-in-producer-index" / "SKILL.md").write_text(
+                "---\nname: not-in-producer-index\ndescription: drift\n---\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools" / "build_catalog.py"),
+                    "--skills-root",
+                    str(added_root),
+                    "--source-json",
+                    str(source_json),
+                    "--out",
+                    str(root / "added-catalog.json"),
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("not present in producer index", result.stderr)
 
     def test_work_graph_is_bound_to_pin(self):
         graph = json.loads((ROOT / "docs/work-graphs/skill-source-sync.json").read_text())
