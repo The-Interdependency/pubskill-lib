@@ -6,4 +6,6 @@ graft examples
 graft tests
 exclude tests/test_service.py
 graft tools
+include docs/skill-source-sync.md
+include docs/work-graphs/skill-source-sync.json
 global-exclude __pycache__ *.py[cod]

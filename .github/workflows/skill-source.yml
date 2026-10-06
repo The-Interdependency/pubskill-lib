@@ -1,0 +1,40 @@
+name: canonical-source
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  canonical-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: consumer
+          persist-credentials: false
+      - name: Resolve immutable canonical source
+        id: source
+        run: |
+          python - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          source = json.loads(Path('consumer/src/pubskill_lib/_source.json').read_text())
+          assert source['repository'] == 'The-Interdependency/skill-lib'
+          assert source['schema'] == 'pubskill-lib.source' and source['version'] == 1
+          assert re.fullmatch('[0-9a-f]{40}', source['commit'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha=' + source['commit'] + '\n')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: The-Interdependency/skill-lib
+          ref: ${{ steps.source.outputs.sha }}
+          path: canonical
+          persist-credentials: false
+      - name: Verify complete public slice against pinned producer
+        run: |
+          test "$(git -C canonical rev-parse HEAD)" = '${{ steps.source.outputs.sha }}'
+          diff -ru canonical/msdmd consumer/.agents/skills/msdmd
+          diff -ru canonical/repo-audit-repair consumer/.agents/skills/repo-audit-repair
+          cmp canonical/doctrine/msdmd-checks.md consumer/.agents/skills/doctrine/msdmd-checks.md
+          cmp canonical/msdmd/parsers/universal.py consumer/src/pubskill_lib/_msdmd_universal.py
+          git -C consumer diff --exit-code
