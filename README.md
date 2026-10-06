@@ -126,6 +126,8 @@ MPL-2.0, same as skill-lib. Changes to MPL-covered files must be published.
 
 ## Canon
 
+Propagation and verification: [Updating the canonical public slice](docs/skill-source-sync.md).
+
 Do not add skills here first. Add them in skill-lib, mark them appropriately, pin the SHA in `SOURCE.md`, then propagate the public slice.
 
 Source updates preserve the original inode in a private `.examiner-originals-*`

@@ -3,12 +3,12 @@
 This directory contains repo-local copies of canonical skills from
 `The-Interdependency/skill-lib`.
 
-Source commit: `8de4f12d0f31ff94f41e4a0196c447c0cbe20faf`
+Source commit: `9867ab33877f2b1f50f8a501cf379aa99360bd52`
 
 Repo-local copies are not the source of truth. Edit `skill-lib` first,
 then propagate from the canonical source.
 
-Installed skills:
+Skills refreshed from the source commit above:
 
 - `msdmd/`
 - `repo-audit-repair/`

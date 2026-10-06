@@ -1,4 +1,27 @@
-# ratios: loc_comments=161:57 imports_exports=4:7 calls_definitions=55:10
+# ratios: loc_comments=161:80 imports_exports=4:7 calls_definitions=55:10
+# === MODULE_BUILD ===
+# id: msdmd_python_reference_parser
+#   module_name: universal
+#   module_kind: instrument
+#   summary: parses canonical line-comment metadata without executing inspected source
+#   owner: The Interdependency skill-lib
+#   public_surface: COMMENT_MARKERS, RATIO_IDS, marker_for, parse_text, parse_file, walk_tree, parse_ratios, parse_ratios_file, ratios_placement
+#   internal_surface: marker and block matching helpers
+#   auth_boundary: none
+#   storage_boundary: read
+#   network_boundary: none
+#   user_data_boundary: read
+#   admin_only: false
+#   tests: tests/test_universal_parser.py
+#   rollout: exact-pinned reference parser propagation
+#   rollback: restore a previously accepted exact parser identity
+# === END MODULE_BUILD ===
+# === CONTRACTS ===
+# id: msdmd_python_parser_preserves_field_names
+#   given: a valid metadata entry uses lowercase snake-case field names containing digits
+#   then: parsed entries retain those field names and string values without executing the inspected source
+#   class: evidence
+# === END CONTRACTS ===
 """Universal msdmd parser — pure stdlib.
 
 Implements the parser contract from ``msdmd/SKILL.md``: extracts every
@@ -69,7 +92,7 @@ COMMENT_MARKERS: dict[str, str] = {
 }
 
 _DEFAULT_SKIP = (
-    "__pycache__", "node_modules", ".git", ".venv", "venv",
+    "__pycache__", "node_modules", ".git", ".agents", ".venv", "venv",
     "dist", "build", ".next", ".nuxt", "target", ".pytest_cache",
     ".mypy_cache", ".tox",
 )
@@ -253,4 +276,4 @@ def ratios_placement(text: str, marker: str = "#") -> tuple[bool, bool]:
         last_ok = bool(line_re.match(raw.rstrip()))
         break
     return (opening_ok, last_ok)
-# ratios: loc_comments=161:57 imports_exports=4:7 calls_definitions=55:10
+# ratios: loc_comments=161:80 imports_exports=4:7 calls_definitions=55:10
