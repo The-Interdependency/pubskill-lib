@@ -1,11 +1,10 @@
-"""Hosted static repository inspection service.
+"""Hosted pubskill service.
 
-Usage: python service.py
-
-This service clones supported public Git repositories and runs pubskill's
-static inspector. It does not install target dependencies, execute target code
-or tests, or claim runtime verification. A true repository audit requires a
-separately isolated execution-and-receipt system and is not offered here yet.
+Schema-1 static inspection (`POST /inspect`) and the retired audit endpoints
+remain unchanged. The versioned `/v1/*` surface adds read-only catalog
+retrieval and schema-2 MSDMD collection/query through the same bounded
+repository acquisition path. All application logic lives in
+`pubskill_lib.api`; this module is only the HTTP transport.
 """
 
 from __future__ import annotations
@@ -13,60 +12,47 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
+from pubskill_lib import api
+from pubskill_lib.acquisition import AcquisitionError, acquire_repository, valid_repo_url
 from pubskill_lib.audit import audit_path
+from pubskill_lib.collections import CollectionError
 
-ALLOWED_GIT_HOSTS = {
-    "github.com",
-    "gitlab.com",
-    "bitbucket.org",
-    "codeberg.org",
-    "git.sr.ht",
-}
 MAX_REQUEST_BYTES = 1024 * 1024
 
-
-def valid_repo_url(value):
-    try:
-        parsed = urlsplit(value)
-        port = parsed.port
-    except (TypeError, ValueError):
-        return False
-
-    parts = [part for part in parsed.path.split("/") if part]
-    return (
-        parsed.scheme == "https"
-        and parsed.hostname in ALLOWED_GIT_HOSTS
-        and parsed.username is None
-        and parsed.password is None
-        and port is None
-        and not parsed.query
-        and not parsed.fragment
-        and len(parts) >= 2
-        and ".." not in parts
-    )
+_INSPECT_FIELDS = {"repo_url"}
+_COLLECT_FIELDS = {"repo_url", "revision", "require_sources", "require_facts", "limits"}
+_QUERY_FIELDS = {
+    "collection",
+    "repo_url",
+    "revision",
+    "convention",
+    "fact_kind",
+    "standing",
+    "subject_contains",
+    "path_glob",
+    "diagnostic_status",
+    "diagnostics_only",
+    "limit",
+}
+_RESOLVE_FIELDS = {"query", "limit"}
 
 
-def run_inspection(repo_url):
+def _reject_unknown_fields(body: dict, allowed: set[str], name: str) -> dict:
+    unknown = sorted(set(body) - allowed)
+    if unknown:
+        raise ValueError(f"unknown fields in {name}: {', '.join(unknown)}")
+    return body
+
+
+def run_inspection(repo_url: str) -> dict:
     """Clone one public repository and run static inspection only."""
     repo_url = str(repo_url or "").strip()
-    if not valid_repo_url(repo_url):
-        raise ValueError("supported public Git repository required")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        target = os.path.join(tmp, "repo")
-        subprocess.run(
-            ["git", "clone", "--depth=1", "--single-branch", repo_url, target],
-            check=True,
-            timeout=120,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        result = audit_path(target)
+    with acquire_repository(repo_url) as acquired:
+        result = audit_path(acquired.path)
         result["inspection_scope"] = {
             "static_only": True,
             "executes_target_code": False,
@@ -78,8 +64,8 @@ def run_inspection(repo_url):
 
 
 class Handler(BaseHTTPRequestHandler):
-    def reply(self, status, body):
-        data = json.dumps(body).encode()
+    def reply(self, status: int, body: object) -> None:
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Cache-Control", "no-store")
@@ -87,7 +73,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def page(self):
+    def page(self) -> None:
         data = Path("index.html").read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -96,31 +82,54 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def request_json(self):
+    def request_json(self) -> dict:
         length = int(self.headers.get("Content-Length", 0))
         if length <= 0 or length > MAX_REQUEST_BYTES:
             raise ValueError("invalid request")
-        return json.loads(self.rfile.read(length))
+        body = json.loads(self.rfile.read(length))
+        if not isinstance(body, dict):
+            raise ValueError("request body must be a JSON object")
+        return body
 
-    def do_GET(self):
-        if urlsplit(self.path).path == "/":
+    def do_GET(self) -> None:
+        parsed = urlsplit(self.path)
+        path = parsed.path
+        if path == "/":
             return self.page()
-        return self.reply(404, {"error": "not found"})
+        try:
+            if path == "/v1/identity":
+                return self.reply(200, api.v1_identity())
+            if path == "/v1/skills":
+                return self.reply(200, api.v1_list_skills())
+            segments = [segment for segment in path.split("/") if segment]
+            if len(segments) == 3 and segments[0] == "v1" and segments[1] == "skills":
+                return self.reply(200, api.v1_get_skill(segments[2]))
+            if (
+                len(segments) == 4
+                and segments[0] == "v1"
+                and segments[1] == "skills"
+                and segments[3] == "resource"
+            ):
+                resource_path = (parse_qs(parsed.query).get("path") or [""])[0]
+                return self.reply(200, api.v1_get_resource(segments[2], resource_path))
+            return self.reply(404, {"error": "not found"})
+        except (ValueError, KeyError, RuntimeError) as exc:
+            return self.reply(400, {"error": str(exc) or "invalid request"})
 
-    def do_POST(self):
-        path = urlsplit(self.path).path
+    def do_POST(self) -> None:
+        parsed = urlsplit(self.path)
+        path = parsed.path
 
         if path == "/inspect":
             try:
                 body = self.request_json()
+                _reject_unknown_fields(body, _INSPECT_FIELDS, "inspect")
                 result = run_inspection(body["repo_url"])
                 return self.reply(200, result)
-            except (ValueError, KeyError, json.JSONDecodeError) as exc:
+            except (ValueError, KeyError, json.JSONDecodeError, AcquisitionError) as exc:
                 return self.reply(400, {"error": str(exc) or "invalid request"})
             except subprocess.TimeoutExpired:
                 return self.reply(504, {"error": "repository inspection timed out"})
-            except subprocess.CalledProcessError:
-                return self.reply(400, {"error": "repository could not be cloned"})
             except Exception as exc:
                 print(f"inspection failure: {exc!r}", flush=True)
                 return self.reply(500, {"error": "inspection failed"})
@@ -135,10 +144,57 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
 
-        return self.reply(404, {"error": "not found"})
+        try:
+            if path == "/v1/skills/resolve":
+                body = _reject_unknown_fields(self.request_json(), _RESOLVE_FIELDS, "skills.resolve")
+                return self.reply(
+                    200,
+                    api.v1_resolve(
+                        body["query"],
+                        limit=body.get("limit"),
+                    ),
+                )
+            if path == "/v1/msdmd/collect":
+                body = _reject_unknown_fields(self.request_json(), _COLLECT_FIELDS, "msdmd.collect")
+                return self.reply(
+                    200,
+                    api.v1_collect(
+                        body["repo_url"],
+                        revision=body.get("revision"),
+                        require_sources=tuple(body.get("require_sources") or ()),
+                        require_facts=tuple(body.get("require_facts") or ()),
+                        limits=body.get("limits"),
+                    ),
+                )
+            if path == "/v1/msdmd/query":
+                body = _reject_unknown_fields(self.request_json(), _QUERY_FIELDS, "msdmd.query")
+                return self.reply(
+                    200,
+                    api.v1_query(
+                        collection=body.get("collection"),
+                        repo_url=body.get("repo_url"),
+                        revision=body.get("revision"),
+                        convention=body.get("convention"),
+                        fact_kind=body.get("fact_kind"),
+                        standing=body.get("standing"),
+                        subject_contains=body.get("subject_contains"),
+                        path_glob=body.get("path_glob"),
+                        diagnostic_status=body.get("diagnostic_status"),
+                        diagnostics_only=bool(body.get("diagnostics_only", False)),
+                        limit=int(body.get("limit", 200)),
+                    ),
+                )
+            return self.reply(404, {"error": "not found"})
+        except (ValueError, KeyError, json.JSONDecodeError, AcquisitionError, CollectionError) as exc:
+            return self.reply(400, {"error": str(exc) or "invalid request"})
+        except subprocess.TimeoutExpired:
+            return self.reply(504, {"error": "operation timed out"})
+        except Exception as exc:
+            print(f"v1 failure: {exc!r}", flush=True)
+            return self.reply(500, {"error": "operation failed"})
 
 
-def main():
+def main() -> None:
     ThreadingHTTPServer(
         ("0.0.0.0", int(os.environ.get("PORT", "8080"))),
         Handler,

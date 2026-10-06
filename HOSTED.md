@@ -5,6 +5,25 @@ The hosted surface at `https://pubskill.interdependentway.org/` exposes two trut
 - **Inspection:** What obvious repository defects and unresolved static boundaries can be found without executing the repository?
 - **Examiner:** What is actually in this codebase, how is it structured and documented, what can be measured safely, and where are the unresolved boundaries?
 
+A versioned read-only API adds catalog retrieval and schema-2 MSDMD
+collection/query over bounded public-repository acquisition:
+
+- `GET /v1/identity`
+- `GET /v1/skills`
+- `GET /v1/skills/{name}`
+- `GET /v1/skills/{name}/resource?path=...`
+- `POST /v1/skills/resolve`
+- `POST /v1/msdmd/collect`
+- `POST /v1/msdmd/query`
+
+`/v1/msdmd/collect` accepts `{"repo_url": "...", "revision": "..."}`; the
+revision is optional, and every receipt returns the resolved immutable commit.
+Acquisition is bounded: allowed HTTPS Git hosts only, no credentials, no
+submodules, no git hooks, no LFS smudging, time/byte/file-count limits, and the
+temporary worktree is deleted after the receipt is built. Target code is never
+installed, executed, or instructed. Schema-1 `/inspect` and schema-2 MSDMD
+collection remain separate contracts; neither is coerced into the other.
+
 ## Repository inspection
 
 Hosted inspection is **free**.
