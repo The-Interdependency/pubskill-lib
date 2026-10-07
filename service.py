@@ -20,6 +20,7 @@ from pubskill_lib import api, mcp_server
 from pubskill_lib.acquisition import AcquisitionError, acquire_repository, valid_repo_url
 from pubskill_lib.audit import audit_path
 from pubskill_lib.collections import CollectionError
+from pubskill_lib.metapat_adapter import MetapatUnavailable
 
 MAX_REQUEST_BYTES = 1024 * 1024
 
@@ -101,6 +102,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, api.v1_identity())
             if path == "/v1/skills":
                 return self.reply(200, api.v1_list_skills())
+            if path == "/v1/metapat/catalog":
+                return self.reply(200, api.v1_metapat_catalog())
             segments = [segment for segment in path.split("/") if segment]
             if len(segments) == 3 and segments[0] == "v1" and segments[1] == "skills":
                 return self.reply(200, api.v1_get_skill(segments[2]))
@@ -113,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
                 resource_path = (parse_qs(parsed.query).get("path") or [""])[0]
                 return self.reply(200, api.v1_get_resource(segments[2], resource_path))
             return self.reply(404, {"error": "not found"})
+        except MetapatUnavailable as exc:
+            return self.reply(404, {"error": str(exc) or "metapat adapter not enabled"})
         except (ValueError, KeyError, RuntimeError) as exc:
             return self.reply(400, {"error": str(exc) or "invalid request"})
 
@@ -199,7 +204,12 @@ class Handler(BaseHTTPRequestHandler):
                         limit=int(body.get("limit", 200)),
                     ),
                 )
+            if path == "/v1/metapat/recurrence":
+                body = self.request_json()
+                return self.reply(200, api.v1_metapat_recurrence(body))
             return self.reply(404, {"error": "not found"})
+        except MetapatUnavailable as exc:
+            return self.reply(404, {"error": str(exc) or "metapat adapter not enabled"})
         except (ValueError, KeyError, json.JSONDecodeError, AcquisitionError, CollectionError) as exc:
             return self.reply(400, {"error": str(exc) or "invalid request"})
         except subprocess.TimeoutExpired:

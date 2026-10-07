@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from . import catalog as catalog_module
 from . import collections as collections_module
+from . import metapat_adapter
 from . import queries as queries_module
 from .acquisition import acquire_repository, receipt_header
 from .identity import response_envelope
@@ -134,3 +135,22 @@ def v1_query(
         limit=limit,
     )
     return response_envelope("msdmd.query", result, input_identity=input_identity)
+
+
+def v1_metapat_catalog() -> dict:
+    """Expose the current METAPAT catalog identity (adapter must be enabled)."""
+    identity = metapat_adapter.metapat_catalog_identity()
+    return response_envelope("metapat.catalog", identity)
+
+
+def v1_metapat_recurrence(evidence: dict) -> dict:
+    """Adjudicate one fully typed METAPAT recurrence evidence record."""
+    decision = metapat_adapter.classify_recurrence(evidence)
+    return response_envelope(
+        "metapat.recurrence",
+        {"decision": decision},
+        input_identity={
+            "source_domain": evidence.get("source_domain"),
+            "target_domain": evidence.get("target_domain"),
+        },
+    )

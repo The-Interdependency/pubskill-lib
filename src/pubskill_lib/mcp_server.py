@@ -10,7 +10,7 @@ import json
 import sys
 from typing import Any
 
-from . import __version__, api
+from . import __version__, api, metapat_adapter
 from .acquisition import AcquisitionError
 from .collections import CollectionError
 
@@ -109,14 +109,31 @@ TOOLS: list[dict[str, Any]] = [
 ]
 
 
+METAPAT_TOOL = {
+    "name": "pubskill_classify_recurrence",
+    "description": "Adjudicate one fully typed METAPAT cross-domain structural-recurrence evidence record through the exact-pin, digest-checked optional adapter. Requires the METAPAT adapter to be enabled.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "evidence": {"type": "object"},
+        },
+        "required": ["evidence"],
+        "additionalProperties": False,
+    },
+}
+
+
 def tool_schemas() -> list[dict[str, Any]]:
+    tools = list(TOOLS)
+    if metapat_adapter.is_metapat_enabled():
+        tools.append(METAPAT_TOOL)
     return [
         {
             "name": tool["name"],
             "description": tool["description"],
             "inputSchema": tool["inputSchema"],
         }
-        for tool in TOOLS
+        for tool in tools
     ]
 
 
@@ -136,7 +153,7 @@ def call_tool(name: str, arguments: dict) -> dict:
     """Execute one pubskill MCP tool against the shared application layer."""
     if not isinstance(arguments, dict):
         raise ValueError("tool arguments must be a JSON object")
-    tool_names = {tool["name"] for tool in TOOLS}
+    tool_names = {tool["name"] for tool in tool_schemas()}
     if name not in tool_names:
         raise ValueError(f"unknown tool: {name}")
 
@@ -174,6 +191,8 @@ def call_tool(name: str, arguments: dict) -> dict:
             arguments["query"],
             limit=arguments.get("limit", 10),
         )
+    elif name == "pubskill_classify_recurrence":
+        result = api.v1_metapat_recurrence(arguments["evidence"])
     else:  # pragma: no cover - guarded above
         raise ValueError(f"unknown tool: {name}")
     return _tool_content(json.dumps(result, ensure_ascii=False))
@@ -281,7 +300,7 @@ def _self_test() -> int:
 
     listed = handle_jsonrpc({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
     names = {tool["name"] for tool in listed["result"]["tools"]}
-    checks.append(("tools/list exposes all 7 pubskill tools", names == {tool["name"] for tool in TOOLS}))
+    checks.append(("tools/list exposes exactly the enabled pubskill tools", names == {tool["name"] for tool in tool_schemas()}))
 
     called = handle_jsonrpc({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "pubskill_list_skills", "arguments": {}}})
     text = json.loads(called["result"]["content"][0]["text"])

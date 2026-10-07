@@ -50,6 +50,24 @@ The end-to-end fixture `examples/metadata-repo` records an exact, replayable
 schema-2 collection (`expected-collection.json`); the canonical-source gate
 replays it byte for byte with `--snapshot-identity --strict --json --check`.
 
+## Optional METAPAT recurrence surface
+
+METAPAT classification is optional and narrower than general inference. When
+the adapter is enabled (an exact checkout of `The-Interdependency/metapat` at
+the pinned commit, exposed via `PUBSKILL_METAPAT_ROOT`), pubskill adds:
+
+- `GET /v1/metapat/catalog` — current METAPAT catalog version, digest, and
+  required module bindings
+- `POST /v1/metapat/recurrence` — adjudicate one fully typed
+  `RecurrenceEvidence` record
+- MCP tool `pubskill_classify_recurrence`
+
+The adapter enforces the exact producer commit and the current catalog digest,
+fails closed on pin mismatch, returns `HMMM` for incomplete mapping/replay/
+ancestry evidence, never verifies an equivalence proof, and keeps
+`semantic_transfer`, `proof_status_transfer`, and `measurement_status_transfer`
+exactly `false`. METAPAT canon is never copied or edited in this repository.
+
 ## Repository inspection
 
 Hosted inspection is **free**.
