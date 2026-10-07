@@ -55,19 +55,69 @@ _SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _RESOURCE_PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 
 
-def _skill_dir(name: str) -> Path:
+def _skill_entry(name: str) -> dict | None:
+    """Return the trusted catalog entry for a validated skill name.
+
+    The name is used only as a dictionary key; filesystem paths are derived
+    from the checked-in catalog entry, never from caller input.
+    """
     if not isinstance(name, str) or not _SKILL_NAME_RE.fullmatch(name):
-        raise KeyError(name)
+        return None
+    return _catalog_by_name(load_catalog()).get(name)
+
+
+def _skill_dir_from_entry(entry: dict) -> Path:
     root = skills_root()
-    skill_dir = (root / name).resolve()
+    skill_dir = (root / entry["path"]).resolve().parent
     if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
-        raise KeyError(name)
+        raise KeyError(entry["name"])
     if skill_dir.parent != root.resolve():
-        raise KeyError(name)
+        raise KeyError(entry["name"])
     return skill_dir
 
 
-def _safe_resource(skill_dir: Path, relative: str) -> Path:
+def _resource_map(skill_dir: Path) -> dict[str, Path]:
+    """Trusted mapping of relative resource paths to filesystem paths."""
+    resources: dict[str, Path] = {}
+    for path in skill_dir.rglob("*"):
+        if not path.is_file() or path.name == "SKILL.md" or path.is_symlink():
+            continue
+        resources[path.relative_to(skill_dir).as_posix()] = path
+    return resources
+
+
+def get_skill(name: str) -> dict:
+    """Return one skill with its SKILL.md text and listed resources."""
+    entry = _skill_entry(name)
+    if entry is None:
+        raise KeyError(name)
+    skill_dir = _skill_dir_from_entry(entry)
+    skill_md = skill_dir / "SKILL.md"
+    resources = []
+    for relative, path in sorted(_resource_map(skill_dir).items()):
+        resources.append(
+            {
+                "path": relative,
+                "digest": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        )
+    return {
+        "name": name,
+        "description": entry.get("description"),
+        "kind": entry.get("kind"),
+        "status": entry.get("status"),
+        "source_commit": entry["source_commit"],
+        "digest": entry["digest"],
+        "skill_md": skill_md.read_text(encoding="utf-8"),
+        "resources": resources,
+    }
+
+
+def get_resource(name: str, relative: str) -> dict:
+    """Return one non-SKILL.md resource inside a skill directory."""
+    entry = _skill_entry(name)
+    if entry is None:
+        raise KeyError(name)
     if (
         not isinstance(relative, str)
         or not relative
@@ -79,57 +129,14 @@ def _safe_resource(skill_dir: Path, relative: str) -> Path:
         raise ValueError("invalid resource path")
     if any(part in ("", ".", "..") for part in relative.split("/")):
         raise ValueError("invalid resource path")
-    candidate = (skill_dir / relative).resolve()
-    if candidate != skill_dir and skill_dir not in candidate.parents:
-        raise ValueError("resource path escapes the skill directory")
-    if not candidate.is_file():
+    resources = _resource_map(_skill_dir_from_entry(entry))
+    if relative not in resources:
         raise KeyError(relative)
-    if candidate.is_symlink():
-        raise ValueError("symlink resources are not served")
-    return candidate
-
-
-def get_skill(name: str) -> dict:
-    """Return one skill with its SKILL.md text and listed resources."""
-    by_name = _catalog_by_name(load_catalog())
-    if name not in by_name:
-        raise KeyError(name)
-    skill_dir = _skill_dir(name)
-    skill_md = skill_dir / "SKILL.md"
-    resources = []
-    for path in sorted(skill_dir.rglob("*")):
-        if not path.is_file() or path.name == "SKILL.md":
-            continue
-        relative = path.relative_to(skill_dir).as_posix()
-        resources.append(
-            {
-                "path": relative,
-                "digest": hashlib.sha256(path.read_bytes()).hexdigest(),
-            }
-        )
-    return {
-        "name": name,
-        "description": by_name[name].get("description"),
-        "kind": by_name[name].get("kind"),
-        "status": by_name[name].get("status"),
-        "source_commit": by_name[name]["source_commit"],
-        "digest": by_name[name]["digest"],
-        "skill_md": skill_md.read_text(encoding="utf-8"),
-        "resources": resources,
-    }
-
-
-def get_resource(name: str, relative: str) -> dict:
-    """Return one non-SKILL.md resource inside a skill directory."""
-    by_name = _catalog_by_name(load_catalog())
-    if name not in by_name:
-        raise KeyError(name)
-    skill_dir = _skill_dir(name)
-    path = _safe_resource(skill_dir, relative)
+    path = resources[relative]
     data = path.read_bytes()
     return {
         "name": name,
-        "path": path.relative_to(skill_dir).as_posix(),
+        "path": relative,
         "digest": hashlib.sha256(data).hexdigest(),
         "content_utf8": data.decode("utf-8", errors="strict"),
     }
