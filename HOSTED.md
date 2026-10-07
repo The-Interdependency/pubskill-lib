@@ -44,7 +44,12 @@ client suitable for demonstrations (no Alexa+ tooling required):
 ```bash
 python -m pubskill_lib.mcp_server --self-test
 python tools/mcp_client.py --url http://127.0.0.1:8080/mcp
+python tools/hackathon_demo.py --url http://127.0.0.1:8080/mcp --interactive
 ```
+
+`tools/hackathon_demo.py` walks the submission vertical slice (identity →
+catalog → resolve → collect → query → retrieve) for screen recording; use
+`--no-collect` to run it without network access.
 
 The end-to-end fixture `examples/metadata-repo` records exact, replayable
 schema-2 collections in `examples/metadata-repo-expected/` (one per supported
