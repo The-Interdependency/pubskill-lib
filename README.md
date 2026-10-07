@@ -6,7 +6,7 @@ Clone this repo when you want a command that inspects a local repository and wri
 
 ## Status
 
-The current source version is `0.2.1`. Published versions and their immutable
+The current source version is `0.3.0`. Published versions and their immutable
 artifacts are listed on [GitHub Releases](https://github.com/The-Interdependency/pubskill-lib/releases); the already-published `v0.2.0` remains immutable.
 
 | Claim | State |
