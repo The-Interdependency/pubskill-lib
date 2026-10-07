@@ -39,7 +39,7 @@
   },
   "declarations": [
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#block/CONTRACTS/double_nonnegative",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#block/CONTRACTS/double_nonnegative",
       "block": "CONTRACTS",
       "fields": {
         "class": "behavior",
@@ -56,7 +56,7 @@
           "pointer": "block:CONTRACTS/id:double_nonnegative"
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "declared"
     }
@@ -74,7 +74,7 @@
           "pointer": "document"
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "status": "unsupported"
     },
@@ -90,7 +90,7 @@
           "pointer": "document"
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "status": "unsupported"
     }
@@ -211,22 +211,14 @@
       "status": "supported"
     },
     {
-      "content_sha256": "311a4d2cf0716b4b963fd203b6cd1ce467cce7f85278712cffb3caa533f75ed5",
+      "content_sha256": "391074776e12ad5e37ddd305ef5accbbdb2742ddaecc06d9662d8e20144238ca",
       "entry_kind": "file",
       "file": "README.md",
       "reader_ids": [
         "markdown-frontmatter"
       ],
-      "size": 764,
+      "size": 889,
       "status": "supported"
-    },
-    {
-      "content_sha256": "hmmm",
-      "entry_kind": "output",
-      "file": "expected-collection.json",
-      "reader_ids": [],
-      "reason": "generated-collection-output",
-      "status": "excluded"
     },
     {
       "content_sha256": "hmmm",
@@ -272,7 +264,7 @@
   "edges": [],
   "facts": [
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/.github/CODEOWNERS#subject/path-rule/rule%3A0/fact/review-ownership/lines%3A1-1/%2Fsrc%2F",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/.github/CODEOWNERS#subject/path-rule/rule%3A0/fact/review-ownership/lines%3A1-1/%2Fsrc%2F",
       "convention": {
         "dialect": "github",
         "namespace": "github.codeowners",
@@ -312,17 +304,17 @@
           "start_line": 1
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "syntactically-observed",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/.github/CODEOWNERS#subject/path-rule/rule%3A0",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/.github/CODEOWNERS#subject/path-rule/rule%3A0",
         "identity": "rule:0",
         "scope": "path-rule"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/.github/CODEOWNERS#subject/path-rule/rule%3A1/fact/review-ownership/lines%3A2-2/%2A.py",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/.github/CODEOWNERS#subject/path-rule/rule%3A1/fact/review-ownership/lines%3A2-2/%2A.py",
       "convention": {
         "dialect": "github",
         "namespace": "github.codeowners",
@@ -362,17 +354,17 @@
           "start_line": 2
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "syntactically-observed",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/.github/CODEOWNERS#subject/path-rule/rule%3A1",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/.github/CODEOWNERS#subject/path-rule/rule%3A1",
         "identity": "rule:1",
         "scope": "path-rule"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/package.json#subject/document/package.json/fact/structured-document/lines%3A%3F-%3F",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/package.json#subject/document/package.json/fact/structured-document/lines%3A%3F-%3F",
       "convention": {
         "dialect": "json",
         "namespace": "npm.package-json",
@@ -405,17 +397,17 @@
           "pointer": ""
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "syntactically-observed",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/package.json#subject/document/package.json",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/package.json#subject/document/package.json",
         "identity": "package.json",
         "scope": "document"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/pyproject.toml#subject/document/pyproject.toml/fact/structured-document/lines%3A%3F-%3F",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/pyproject.toml#subject/document/pyproject.toml/fact/structured-document/lines%3A%3F-%3F",
       "convention": {
         "dialect": "toml",
         "namespace": "python.pyproject",
@@ -451,17 +443,17 @@
           "pointer": ""
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "syntactically-observed",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/pyproject.toml#subject/document/pyproject.toml",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/pyproject.toml#subject/document/pyproject.toml",
         "identity": "pyproject.toml",
         "scope": "document"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/module/src%2Fexample.py/fact/comment/0",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/module/src%2Fexample.py/fact/comment/0",
       "convention": {
         "dialect": "python",
         "namespace": "python.line-comment",
@@ -505,17 +497,17 @@
           "start_line": 1
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "declared",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/module/src%2Fexample.py",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/module/src%2Fexample.py",
         "identity": "src/example.py",
         "scope": "module"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/double/fact/declaration",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/double/fact/declaration",
       "convention": {
         "dialect": "python",
         "namespace": "python.source-metadata",
@@ -567,17 +559,17 @@
           "start_line": 9
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "syntactically-observed",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/double",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/double",
         "identity": "double",
         "scope": "symbol"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/double/fact/documentation/0",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/double/fact/documentation/0",
       "convention": {
         "dialect": "python",
         "namespace": "python.pep257",
@@ -621,17 +613,17 @@
           "start_line": 10
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "declared",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/double",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/double",
         "identity": "double",
         "scope": "symbol"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/main/fact/declaration",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/main/fact/declaration",
       "convention": {
         "dialect": "python",
         "namespace": "python.source-metadata",
@@ -683,17 +675,17 @@
           "start_line": 14
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "syntactically-observed",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/main",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/main",
         "identity": "main",
         "scope": "symbol"
       }
     },
     {
-      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/main/fact/documentation/0",
+      "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/main/fact/documentation/0",
       "convention": {
         "dialect": "python",
         "namespace": "python.pep257",
@@ -737,11 +729,11 @@
           "start_line": 15
         },
         "repository": "fixture/metadata-repo",
-        "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df"
+        "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6"
       },
       "standing": "declared",
       "subject": {
-        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3Aa78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df/src/example.py#subject/symbol/main",
+        "address": "msdmd://fixture%2Fmetadata-repo@snapshot%3A6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6/src/example.py#subject/symbol/main",
         "identity": "main",
         "scope": "symbol"
       }
@@ -1380,10 +1372,10 @@
     "exclusion_accounting": "configured-patterns",
     "git_head": "hmmm",
     "repository": "fixture/metadata-repo",
-    "revision": "snapshot:a78333d6fe47a0dddb0cbc02f2b5e718f5b67b5886b38c6c01f2b94be155e9df",
+    "revision": "snapshot:6c878a32d4f3eb289f965999747fc169b3263b651ff083390b57ad9cab9521f6",
     "revision_kind": "content-snapshot",
     "scope": "configured in-scope files; excluded subtrees are reported without traversing",
     "snapshot_complete": true,
-    "snapshot_sha256": "ad655d29c6290c5cdfa6566ffe0896cda82c9307e5dd592f7dd6944f568df371"
+    "snapshot_sha256": "f19923528ccfcf7ab3437a4e92fc4003c0de5c81840a6255fbf8dfdd3e37d38b"
   }
 }

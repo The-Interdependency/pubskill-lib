@@ -219,9 +219,8 @@ class AcquisitionBoundaryTests(unittest.TestCase):
 
 class ServiceBoundaryTests(unittest.TestCase):
     def test_unknown_request_fields_are_rejected(self):
-        import service
         with self.assertRaises(ValueError):
-            service._reject_unknown_fields({"repo_url": "x", "extra": 1}, {"repo_url"}, "inspect")
+            api.reject_unknown_fields({"repo_url": "x", "extra": 1}, {"repo_url"}, "inspect")
 
 
 if __name__ == "__main__":

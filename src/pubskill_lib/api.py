@@ -13,6 +13,16 @@ from .acquisition import acquire_repository, receipt_header
 from .identity import response_envelope
 
 
+def reject_unknown_fields(data: object, allowed: set[str], name: str) -> dict:
+    """Reject request objects that carry fields outside the declared surface."""
+    if not isinstance(data, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    unknown = sorted(set(data) - allowed)
+    if unknown:
+        raise ValueError(f"unknown fields in {name}: {', '.join(unknown)}")
+    return data
+
+
 def v1_identity() -> dict:
     return response_envelope(
         "identity",

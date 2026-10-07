@@ -46,9 +46,10 @@ python -m pubskill_lib.mcp_server --self-test
 python tools/mcp_client.py --url http://127.0.0.1:8080/mcp
 ```
 
-The end-to-end fixture `examples/metadata-repo` records an exact, replayable
-schema-2 collection (`expected-collection.json`); the canonical-source gate
-replays it byte for byte with `--snapshot-identity --strict --json --check`.
+The end-to-end fixture `examples/metadata-repo` records exact, replayable
+schema-2 collections in `examples/metadata-repo-expected/` (one per supported
+interpreter); the test gate replays them byte for byte with
+`--snapshot-identity --strict --json --check`.
 
 ## Optional METAPAT recurrence surface
 

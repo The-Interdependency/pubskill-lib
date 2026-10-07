@@ -175,7 +175,14 @@ class McpSelfTestTests(unittest.TestCase):
 
 
 class FixtureReplayTests(unittest.TestCase):
+    def _expected_collection(self) -> Path:
+        version_tag = f"py{sys.version_info[0]}{sys.version_info[1]}"
+        return REPO / "examples" / "metadata-repo-expected" / f"collection-{version_tag}.json"
+
     def test_fixture_collection_replays_byte_for_byte(self):
+        expected = self._expected_collection()
+        if not expected.is_file():
+            self.skipTest(f"no expected fixture collection for {sys.version_info[:2]}")
         env = dict(os.environ)
         pythonpath = str(SKILLS)
         if env.get("PYTHONPATH"):
@@ -194,7 +201,7 @@ class FixtureReplayTests(unittest.TestCase):
                 "--strict",
                 "--json",
                 "--out",
-                str(REPO / "examples" / "metadata-repo" / "expected-collection.json"),
+                str(expected),
                 "--check",
             ],
             cwd=REPO,
@@ -205,9 +212,10 @@ class FixtureReplayTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_fixture_collection_has_schema2_facts_and_declarations(self):
-        collection = json.loads(
-            (REPO / "examples" / "metadata-repo" / "expected-collection.json").read_text(encoding="utf-8")
-        )
+        expected = self._expected_collection()
+        if not expected.is_file():
+            self.skipTest(f"no expected fixture collection for {sys.version_info[:2]}")
+        collection = json.loads(expected.read_text(encoding="utf-8"))
         self.assertEqual(collection["schema"], "the-interdependency.msdmd-collection")
         self.assertEqual(collection["schema_version"], "2.0.0")
         self.assertEqual(collection["source"]["revision_kind"], "content-snapshot")

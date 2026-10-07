@@ -51,7 +51,13 @@ def list_skills() -> list[dict]:
     ]
 
 
+_SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+_RESOURCE_PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+
+
 def _skill_dir(name: str) -> Path:
+    if not isinstance(name, str) or not _SKILL_NAME_RE.fullmatch(name):
+        raise KeyError(name)
     root = skills_root()
     skill_dir = (root / name).resolve()
     if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
@@ -62,7 +68,16 @@ def _skill_dir(name: str) -> Path:
 
 
 def _safe_resource(skill_dir: Path, relative: str) -> Path:
-    if not relative or "\x00" in relative:
+    if (
+        not isinstance(relative, str)
+        or not relative
+        or "\x00" in relative
+        or "\\" in relative
+        or relative.startswith("/")
+        or not _RESOURCE_PATH_RE.fullmatch(relative)
+    ):
+        raise ValueError("invalid resource path")
+    if any(part in ("", ".", "..") for part in relative.split("/")):
         raise ValueError("invalid resource path")
     candidate = (skill_dir / relative).resolve()
     if candidate != skill_dir and skill_dir not in candidate.parents:

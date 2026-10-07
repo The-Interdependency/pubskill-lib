@@ -42,13 +42,6 @@ _QUERY_FIELDS = {
 _RESOLVE_FIELDS = {"query", "limit"}
 
 
-def _reject_unknown_fields(body: dict, allowed: set[str], name: str) -> dict:
-    unknown = sorted(set(body) - allowed)
-    if unknown:
-        raise ValueError(f"unknown fields in {name}: {', '.join(unknown)}")
-    return body
-
-
 def run_inspection(repo_url: str) -> dict:
     """Clone one public repository and run static inspection only."""
     repo_url = str(repo_url or "").strip()
@@ -128,7 +121,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/inspect":
             try:
                 body = self.request_json()
-                _reject_unknown_fields(body, _INSPECT_FIELDS, "inspect")
+                api.reject_unknown_fields(body, _INSPECT_FIELDS, "inspect")
                 result = run_inspection(body["repo_url"])
                 return self.reply(200, result)
             except (ValueError, KeyError, json.JSONDecodeError, AcquisitionError) as exc:
@@ -166,7 +159,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             if path == "/v1/skills/resolve":
-                body = _reject_unknown_fields(self.request_json(), _RESOLVE_FIELDS, "skills.resolve")
+                body = api.reject_unknown_fields(self.request_json(), _RESOLVE_FIELDS, "skills.resolve")
                 return self.reply(
                     200,
                     api.v1_resolve(
@@ -175,7 +168,7 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                 )
             if path == "/v1/msdmd/collect":
-                body = _reject_unknown_fields(self.request_json(), _COLLECT_FIELDS, "msdmd.collect")
+                body = api.reject_unknown_fields(self.request_json(), _COLLECT_FIELDS, "msdmd.collect")
                 return self.reply(
                     200,
                     api.v1_collect(
@@ -187,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                 )
             if path == "/v1/msdmd/query":
-                body = _reject_unknown_fields(self.request_json(), _QUERY_FIELDS, "msdmd.query")
+                body = api.reject_unknown_fields(self.request_json(), _QUERY_FIELDS, "msdmd.query")
                 return self.reply(
                     200,
                     api.v1_query(
