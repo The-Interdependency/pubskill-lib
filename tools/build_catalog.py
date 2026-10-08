@@ -115,6 +115,18 @@ def build_manifest(skills_root: Path = SKILLS_ROOT, source_json: Path = SOURCE_J
             + ", ".join(unexpected)
         )
 
+    # Reject unindexed top-level files/directories so unpinned bytes can
+    # never ship inside the propagated catalog.
+    consumer_owned = {"README.md", "skills.json", "catalog.json"}
+    allowed_entries = set(names) | {"doctrine"} | consumer_owned
+    top_level = {path.name for path in skills_root.iterdir()}
+    stray = sorted(top_level - allowed_entries)
+    if stray:
+        raise ValueError(
+            "unindexed entries in skills root not present in producer catalog: "
+            + ", ".join(stray)
+        )
+
     skills_json_digest = sha256_bytes(index_bytes)
     doctrine_digest = digest_tree(skills_root / "doctrine")
     set_hasher = hashlib.sha256()

@@ -62,12 +62,14 @@ of the rollback contract and must not change between deployments.
    Compare `receipt.repository.resolved_commit` to the requested revision and
    to the accepted local receipt. The schema must be
    `the-interdependency.msdmd-collection` version `2.0.0`.
-4. Replay `examples/metadata-repo`:
+4. Replay `examples/metadata-repo` (normalized byte-for-byte replay across
+   supported interpreters):
    ```bash
+   python -m unittest tests.test_mcp.FixtureReplayTests -v
    PYTHONPATH=.agents/skills python -m msdmd.collect \
      --root examples/metadata-repo --repo fixture/metadata-repo \
      --snapshot-identity --strict --json \
-     --out examples/metadata-repo/expected-collection.json --check
+     --out /tmp/fixture-collection.json
    ```
 5. MCP capability discovery: `tools/list` must expose exactly the enabled
    tools (plus `pubskill_classify_recurrence` only when METAPAT is enabled).

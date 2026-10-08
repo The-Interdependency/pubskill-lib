@@ -18,4 +18,4 @@ pubskill-examine = "pubskill_lib.examine:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-pubskill_lib = ["_source.json"]
+pubskill_lib = ["_source.json", "_build.json"]

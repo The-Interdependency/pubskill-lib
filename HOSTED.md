@@ -51,10 +51,10 @@ python tools/hackathon_demo.py --url http://127.0.0.1:8080/mcp --interactive
 catalog → resolve → collect → query → retrieve) for screen recording; use
 `--no-collect` to run it without network access.
 
-The end-to-end fixture `examples/metadata-repo` records exact, replayable
-schema-2 collections in `examples/metadata-repo-expected/` (one per supported
-interpreter); the test gate replays them byte for byte with
-`--snapshot-identity --strict --json --check`.
+The end-to-end fixture `examples/metadata-repo` records an exact, replayable
+schema-2 collection in `examples/metadata-repo-expected/collection-normalized.json`
+(Python reader version labels normalized); the test gate replays it byte for
+byte on every supported interpreter.
 
 ## Optional METAPAT recurrence surface
 
