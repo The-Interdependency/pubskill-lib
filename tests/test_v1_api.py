@@ -6,13 +6,19 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from pubskill_lib import api, collections, identity, queries
-from pubskill_lib.acquisition import AcquisitionError, acquire_repository, valid_repo_url
+from pubskill_lib import acquisition, api, collections, identity, queries
+from pubskill_lib.acquisition import (
+    AcquisitionError,
+    acquire_repository,
+    valid_repo_url,
+    valid_revision,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -39,6 +45,17 @@ class IdentityTests(unittest.TestCase):
             status["missing"],
             [name for name, present in status["python_runtimes"].items() if not present],
         )
+
+    def test_consumer_commit_prefers_build_identity_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package_root = Path(directory) / "pubskill_lib"
+            package_root.mkdir()
+            (package_root / "_build.json").write_text(
+                json.dumps({"schema": "pubskill-lib.build", "version": 1, "consumer_commit": "a" * 40}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(identity, "PACKAGE_ROOT", package_root):
+                self.assertEqual(identity.consumer_commit(), "a" * 40)
 
 
 class CatalogTests(unittest.TestCase):
@@ -101,6 +118,36 @@ class CatalogTests(unittest.TestCase):
                 )
                 with self.assertRaises(ValueError):
                     api.v1_get_resource("sym-skill", "link.txt")
+
+    def test_resource_listing_excludes_runtime_caches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root / "skills"
+            skill_dir = skills / "sym-skill"
+            cache_dir = skill_dir / "__pycache__"
+            cache_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("---\nname: sym-skill\ndescription: test\n---\n", encoding="utf-8")
+            (skill_dir / "real.txt").write_text("real", encoding="utf-8")
+            (cache_dir / "generated.pyc").write_bytes(b"\x00\x00\x00")
+            catalog_manifest = {
+                "schema": "pubskill-lib.catalog",
+                "version": 1,
+                "producer": {"repository": "The-Interdependency/skill-lib", "commit": "0" * 40},
+                "skill_count": 1,
+                "propagated_set_digest": "0" * 64,
+                "skills": [{
+                    "name": "sym-skill",
+                    "path": "sym-skill/SKILL.md",
+                    "digest": "0" * 64,
+                    "source_commit": "0" * 40,
+                }],
+            }
+            (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+                skill = api.v1_get_skill("sym-skill")["skill"]
+                paths = {item["path"] for item in skill["resources"]}
+                self.assertIn("real.txt", paths)
+                self.assertNotIn("__pycache__/generated.pyc", paths)
 
     def test_resolve_returns_scored_candidates_not_authority(self):
         resolved = api.v1_resolve("metadata collection")
@@ -188,15 +235,42 @@ class QueryTests(unittest.TestCase):
             empty = queries.query_collection(collection, convention="not-a-convention")
             self.assertEqual(empty["counts"]["matched_facts"], 0)
 
+    def test_query_matches_structured_subjects_and_source_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            _make_git_fixture(root)
+            collection = collections.collect_metadata(root, "fixture/repo", strict=True).collection
+            by_subject = queries.query_collection(collection, subject_contains="example.py")
+            self.assertGreater(by_subject["counts"]["matched_facts"], 0)
+            by_path = queries.query_collection(collection, path_glob="*.py")
+            self.assertGreater(by_path["counts"]["matched_facts"], 0)
+            no_match = queries.query_collection(collection, path_glob="*.rs")
+            self.assertEqual(no_match["counts"]["matched_facts"], 0)
+
+    def test_query_diagnostics_only_excludes_facts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            _make_git_fixture(root)
+            collection = collections.collect_metadata(root, "fixture/repo", strict=True).collection
+            result = queries.query_collection(collection, diagnostics_only=True)
+            self.assertEqual(result["counts"]["matched_facts"], 0)
+            self.assertEqual(result["matched_facts"], [])
+
     def test_v1_query_rejects_non_collection(self):
         with self.assertRaises(ValueError):
             api.v1_query(collection={"schema": "not-msdmd"})
+        with self.assertRaises(ValueError):
+            api.v1_query(collection={"schema": "the-interdependency.msdmd-collection", "schema_version": "1.0.0"})
+        with self.assertRaises(ValueError):
+            api.v1_query(collection={"schema": "the-interdependency.msdmd-collection", "schema_version": "2.0.0", "facts": [None]})
 
 
 class AcquisitionBoundaryTests(unittest.TestCase):
     def test_url_validation(self):
         self.assertTrue(valid_repo_url("https://github.com/owner/repo"))
-        self.assertTrue(valid_repo_url("https://gitlab.com/owner/repo/sub"))
+        self.assertTrue(valid_repo_url("https://gitlab.com/group/subgroup/team/repo"))
         for bad in (
             "http://github.com/owner/repo",
             "https://github.com/owner/repo.git?x=1",
@@ -206,21 +280,73 @@ class AcquisitionBoundaryTests(unittest.TestCase):
             "ssh://git@github.com/owner/repo",
             "file:///tmp/repo",
             "https://github.com/owner",
-            "https://github.com/owner/repo/too/many",
+            "https://github.com/owner/repo/sub",
             "https://github.com/owner/../repo",
         ):
             self.assertFalse(valid_repo_url(bad), bad)
+
+    def test_revision_grammar_rejects_git_options(self):
+        for bad in ("--tags", "-x", "HEAD~1..HEAD~2", "ref with space"):
+            with self.assertRaises(AcquisitionError):
+                with acquire_repository("https://github.com/owner/repo", revision=bad):
+                    pass
+        self.assertTrue(valid_revision("7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"))
+        self.assertTrue(valid_revision("v1.2.3"))
+        self.assertTrue(valid_revision("refs/heads/main"))
 
     def test_acquire_rejects_bad_url(self):
         with self.assertRaises(AcquisitionError):
             with acquire_repository("https://github.com/owner/../repo"):
                 pass
 
+    def test_monitor_kills_acquisition_when_caps_crossed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            target = base / "repo"
+            target.mkdir()
+            bindir = base / "bin"
+            bindir.mkdir()
+            fake_git = bindir / "git"
+            fake_git.write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
+            fake_git.chmod(0o755)
+            writer = base / "writer.py"
+            writer.write_text(
+                "import pathlib, sys, time\n"
+                "base = pathlib.Path(sys.argv[1])\n"
+                "i = 0\n"
+                "while True:\n"
+                "    (base / str(i)).write_text('x' * 1024)\n"
+                "    i += 1\n"
+                "    time.sleep(0.02)\n",
+                encoding="utf-8",
+            )
+            env = dict(os.environ, PATH=f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+            child = subprocess.Popen([sys.executable, str(writer), str(target)])
+            try:
+                with self.assertRaises(AcquisitionError):
+                    acquisition._run_git_limited(
+                        [],
+                        target=target,
+                        limits=dict(acquisition.DEFAULT_LIMITS, max_file_count=5, fetch_timeout_seconds=10),
+                        env=env,
+                    )
+            finally:
+                child.terminate()
+                child.wait(timeout=5)
+
 
 class ServiceBoundaryTests(unittest.TestCase):
     def test_unknown_request_fields_are_rejected(self):
         with self.assertRaises(ValueError):
             api.reject_unknown_fields({"repo_url": "x", "extra": 1}, {"repo_url"}, "inspect")
+
+    def test_collect_rejects_client_limits_override(self):
+        with self.assertRaises(ValueError):
+            api.reject_unknown_fields(
+                {"repo_url": "x", "limits": {"max_repo_bytes": 1}},
+                {"repo_url", "revision", "require_sources", "require_facts"},
+                "msdmd.collect",
+            )
 
 
 if __name__ == "__main__":

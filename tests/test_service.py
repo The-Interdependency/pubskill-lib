@@ -81,10 +81,22 @@ class ServiceBoundaryTests(unittest.TestCase):
                 self.assertFalse(hasattr(service, name))
 
     def test_invalid_repository_is_rejected_before_clone(self) -> None:
-        with patch.object(service.subprocess, "run") as run:
+        with patch("pubskill_lib.acquisition.subprocess.run") as run:
             with self.assertRaises(AcquisitionError):
                 service.run_inspection("https://example.com/owner/repo")
         run.assert_not_called()
+
+    def test_requirement_arrays_are_capped_and_deduplicated(self) -> None:
+        self.assertEqual(
+            service._validated_requirements(["a", "b", "a"], "require_sources"),
+            ("a", "b"),
+        )
+        with self.assertRaises(ValueError):
+            service._validated_requirements([str(i) for i in range(21)], "require_sources")
+        with self.assertRaises(ValueError):
+            service._validated_requirements(["x" * 257], "require_sources")
+        with self.assertRaises(ValueError):
+            service._validated_requirements([1], "require_facts")
 
 
 if __name__ == "__main__":

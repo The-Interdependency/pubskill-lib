@@ -11,21 +11,27 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from pubskill_lib import api, mcp_server
-from pubskill_lib.acquisition import AcquisitionError, acquire_repository, valid_repo_url
+from pubskill_lib.acquisition import (
+    AcquisitionError,
+    AcquisitionTimeoutError,
+    acquire_repository,
+    valid_repo_url,
+)
 from pubskill_lib.audit import audit_path
-from pubskill_lib.collections import CollectionError
+from pubskill_lib.collections import CollectionError, CollectionTimeoutError
 from pubskill_lib.metapat_adapter import MetapatUnavailable
 
 MAX_REQUEST_BYTES = 1024 * 1024
+MAX_REQUIREMENTS = 20
+MAX_REQUIREMENT_LENGTH = 256
 
 _INSPECT_FIELDS = {"repo_url"}
-_COLLECT_FIELDS = {"repo_url", "revision", "require_sources", "require_facts", "limits"}
+_COLLECT_FIELDS = {"repo_url", "revision", "require_sources", "require_facts"}
 _QUERY_FIELDS = {
     "collection",
     "repo_url",
@@ -55,6 +61,19 @@ def run_inspection(repo_url: str) -> dict:
             "runtime_verified": False,
         }
         return result
+
+
+def _validated_requirements(value: object, name: str) -> tuple[str, ...]:
+    """Cap, deduplicate and validate collection requirement arrays."""
+    if value is None:
+        return ()
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise ValueError(f"{name} must be an array of non-empty strings")
+    if len(value) > MAX_REQUIREMENTS:
+        raise ValueError(f"{name} supports at most {MAX_REQUIREMENTS} entries")
+    if any(len(item) > MAX_REQUIREMENT_LENGTH for item in value):
+        raise ValueError(f"{name} entries must be at most {MAX_REQUIREMENT_LENGTH} characters")
+    return tuple(dict.fromkeys(value))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -90,6 +109,13 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         if path == "/":
             return self.page()
+        if path == "/mcp":
+            self.send_response(405)
+            self.send_header("Allow", "POST")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         try:
             if path == "/v1/identity":
                 return self.reply(200, api.v1_identity())
@@ -124,10 +150,10 @@ class Handler(BaseHTTPRequestHandler):
                 api.reject_unknown_fields(body, _INSPECT_FIELDS, "inspect")
                 result = run_inspection(body["repo_url"])
                 return self.reply(200, result)
+            except AcquisitionTimeoutError:
+                return self.reply(504, {"error": "repository inspection timed out"})
             except (ValueError, KeyError, json.JSONDecodeError, AcquisitionError) as exc:
                 return self.reply(400, {"error": str(exc) or "invalid request"})
-            except subprocess.TimeoutExpired:
-                return self.reply(504, {"error": "repository inspection timed out"})
             except Exception as exc:
                 print(f"inspection failure: {exc!r}", flush=True)
                 return self.reply(500, {"error": "inspection failed"})
@@ -137,7 +163,10 @@ class Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > 4 * 1024 * 1024:
                 return self.reply(400, {"error": "invalid request body"})
             status, content_type, data = mcp_server.handle_http_bytes(
-                self.rfile.read(length), self.headers.get("Accept", "")
+                self.rfile.read(length),
+                self.headers.get("Accept", ""),
+                self.headers.get("Origin"),
+                self.headers.get("MCP-Protocol-Version"),
             )
             self.send_response(status)
             self.send_header("Content-Type", content_type)
@@ -174,9 +203,8 @@ class Handler(BaseHTTPRequestHandler):
                     api.v1_collect(
                         body["repo_url"],
                         revision=body.get("revision"),
-                        require_sources=tuple(body.get("require_sources") or ()),
-                        require_facts=tuple(body.get("require_facts") or ()),
-                        limits=body.get("limits"),
+                        require_sources=_validated_requirements(body.get("require_sources"), "require_sources"),
+                        require_facts=_validated_requirements(body.get("require_facts"), "require_facts"),
                     ),
                 )
             if path == "/v1/msdmd/query":
@@ -203,10 +231,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(404, {"error": "not found"})
         except MetapatUnavailable as exc:
             return self.reply(404, {"error": str(exc) or "metapat adapter not enabled"})
+        except (AcquisitionTimeoutError, CollectionTimeoutError):
+            return self.reply(504, {"error": "operation timed out"})
         except (ValueError, KeyError, json.JSONDecodeError, AcquisitionError, CollectionError) as exc:
             return self.reply(400, {"error": str(exc) or "invalid request"})
-        except subprocess.TimeoutExpired:
-            return self.reply(504, {"error": "operation timed out"})
         except Exception as exc:
             print(f"v1 failure: {exc!r}", flush=True)
             return self.reply(500, {"error": "operation failed"})

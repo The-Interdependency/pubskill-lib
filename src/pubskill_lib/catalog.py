@@ -77,10 +77,19 @@ def _skill_dir_from_entry(entry: dict) -> Path:
 
 
 def _resource_map(skill_dir: Path) -> dict[str, Path]:
-    """Trusted mapping of relative resource paths to filesystem paths."""
+    """Trusted mapping of relative resource paths to filesystem paths.
+
+    Generated interpreter caches are excluded so the served resource set stays
+    source-pinned and deterministic, matching the catalog builder's digest
+    scope.
+    """
     resources: dict[str, Path] = {}
     for path in skill_dir.rglob("*"):
         if not path.is_file() or path.name == "SKILL.md" or path.is_symlink():
+            continue
+        if any(part == "__pycache__" for part in path.parts):
+            continue
+        if path.suffix == ".pyc":
             continue
         resources[path.relative_to(skill_dir).as_posix()] = path
     return resources

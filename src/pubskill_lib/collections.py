@@ -13,6 +13,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,12 +23,17 @@ from .identity import skills_root
 
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
 DEFAULT_COLLECT_TIMEOUT_SECONDS = 180
+DEFAULT_MAX_OUTPUT_CHARS = 8 * 1024 * 1024
 MSDMD_SCHEMA = "the-interdependency.msdmd-collection"
 MSDMD_SCHEMA_VERSION = "2.0.0"
 
 
 class CollectionError(RuntimeError):
     """Schema-2 collection produced errors or could not be validated."""
+
+
+class CollectionTimeoutError(CollectionError):
+    """Schema-2 collection exceeded a configured time bound."""
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,58 @@ def _resolve_git_commit(root: Path) -> str:
         return "hmmm"
 
 
+def _run_collector_capped(
+    command: list[str],
+    *,
+    env: dict,
+    timeout_seconds: int,
+    max_output_chars: int,
+) -> tuple[int, str, str]:
+    """Run the collector while enforcing a hard cap on buffered output.
+
+    stdout and stderr are spooled to temporary files, and a monitor thread
+    terminates the collector as soon as the declared output cap is crossed, so
+    a metadata-rich repository cannot force unbounded response buffering.
+    """
+    max_bytes = max(1, max_output_chars)  # UTF-8 bytes are >= chars; byte cap is conservative
+    with tempfile.TemporaryFile() as out_file, tempfile.TemporaryFile() as err_file:
+        process = subprocess.Popen(
+            command,
+            stdout=out_file,
+            stderr=err_file,
+            env=env,
+        )
+        exceeded: list[bool] = []
+
+        def monitor() -> None:
+            while process.poll() is None:
+                if out_file.tell() > max_bytes:
+                    exceeded.append(True)
+                    process.kill()
+                    return
+                time.sleep(0.1)
+
+        thread = threading.Thread(target=monitor, daemon=True)
+        thread.start()
+        try:
+            process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as error:
+            process.kill()
+            process.wait()
+            raise CollectionTimeoutError(f"collection timed out after {timeout_seconds}s") from error
+        finally:
+            thread.join(timeout=1)
+        out_file.seek(0)
+        err_file.seek(0)
+        stdout = out_file.read()
+        stderr = err_file.read()
+    if exceeded or len(stdout) > max_bytes:
+        raise CollectionError(
+            f"collection output exceeded {max_output_chars} chars and was rejected"
+        )
+    return process.returncode, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
+
+
 def collect_metadata(
     root: Path,
     repo: str,
@@ -92,6 +152,7 @@ def collect_metadata(
     require_sources: tuple[str, ...] = (),
     require_facts: tuple[str, ...] = (),
     timeout_seconds: int = DEFAULT_COLLECT_TIMEOUT_SECONDS,
+    max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS,
 ) -> CollectionResult:
     """Run the canonical schema-2 collector over a local checkout.
 
@@ -142,30 +203,23 @@ def collect_metadata(
     if strict:
         command.append("--strict")
 
-    try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            env=env,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise CollectionError(f"collection timed out after {timeout_seconds}s") from error
-    except OSError as error:
-        raise CollectionError(f"collector could not start: {error}") from error
+    returncode, stdout, stderr = _run_collector_capped(
+        command,
+        env=env,
+        timeout_seconds=timeout_seconds,
+        max_output_chars=max_output_chars,
+    )
 
-    if completed.returncode not in (0, 2):
+    if returncode not in (0, 2):
         raise CollectionError(
-            f"collector exited {completed.returncode}: {completed.stderr.strip()[:4000]}"
+            f"collector exited {returncode}: {stderr.strip()[:4000]}"
         )
 
     try:
-        collection = json.loads(completed.stdout)
+        collection = json.loads(stdout)
     except json.JSONDecodeError as error:
         raise CollectionError(
-            f"collector emitted invalid JSON: {error}; stderr: {completed.stderr.strip()[:2000]}"
+            f"collector emitted invalid JSON: {error}; stderr: {stderr.strip()[:2000]}"
         ) from error
 
     if collection.get("schema") != MSDMD_SCHEMA:
@@ -178,10 +232,10 @@ def collect_metadata(
     result = CollectionResult(
         collection=collection,
         command=command,
-        returncode=completed.returncode,
-        stderr=completed.stderr,
+        returncode=returncode,
+        stderr=stderr,
     )
-    if strict and completed.returncode == 2:
+    if strict and returncode == 2:
         errors = [
             item
             for item in collection.get("diagnostics", [])

@@ -8,9 +8,30 @@ _FACT_KEYS = ("address", "convention", "extraction", "kind", "native", "origin",
 _DIAGNOSTIC_KEYS = ("code", "status", "severity", "message", "reader_id", "source", "subject")
 
 
+def _contains(value: object, needle: str) -> bool:
+    """Recursive string search over scalars and containers."""
+    if isinstance(value, str):
+        return needle.lower() in value.lower()
+    if isinstance(value, dict):
+        return any(_contains(item, needle) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains(item, needle) for item in value)
+    return False
+
+
 def _matches(item: dict, needle: str, key: str) -> bool:
-    value = item.get(key)
-    return isinstance(value, str) and needle.lower() in value.lower()
+    return _contains(item.get(key), needle)
+
+
+def _source_path(item: dict) -> str | None:
+    source = item.get("source")
+    if not isinstance(source, dict):
+        return None
+    for key in ("file", "path"):
+        value = source.get(key)
+        if isinstance(value, str):
+            return value
+    return None
 
 
 def _convention_matches(item: dict, convention: str) -> bool:
@@ -42,10 +63,10 @@ def query_collection(
     if limit < 1 or limit > 1000:
         raise ValueError("limit must be between 1 and 1000")
 
-    facts = collection.get("facts", [])
-    declarations = collection.get("declarations", [])
-    edges = collection.get("edges", [])
-    diagnostics = collection.get("diagnostics", [])
+    facts = [item for item in collection.get("facts", []) if isinstance(item, dict)]
+    declarations = [item for item in collection.get("declarations", []) if isinstance(item, dict)]
+    edges = [item for item in collection.get("edges", []) if isinstance(item, dict)]
+    diagnostics = [item for item in collection.get("diagnostics", []) if isinstance(item, dict)]
 
     def fact_ok(item: dict) -> bool:
         if convention and not _convention_matches(item, convention):
@@ -57,9 +78,8 @@ def query_collection(
         if subject_contains and not _matches(item, subject_contains, "subject"):
             return False
         if path_glob:
-            source = item.get("source", {})
-            path = source.get("path") if isinstance(source, dict) else None
-            if not isinstance(path, str) or not fnmatch.fnmatchcase(path, path_glob):
+            path = _source_path(item)
+            if path is None or not fnmatch.fnmatchcase(path, path_glob):
                 return False
         return True
 
@@ -86,7 +106,7 @@ def query_collection(
             return False
         return True
 
-    matched_facts = [item for item in facts if fact_ok(item)][:limit]
+    matched_facts = [] if diagnostics_only else [item for item in facts if fact_ok(item)][:limit]
     matched_declarations = [] if diagnostics_only else [item for item in declarations if decl_ok(item)][:limit]
     matched_edges = [] if diagnostics_only else [item for item in edges if edge_ok(item)][:limit]
     matched_diagnostics = [item for item in diagnostics if diag_ok(item)][:limit]

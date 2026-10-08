@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -122,13 +123,41 @@ class McpJsonRpcTests(unittest.TestCase):
 
 
 class McpHttpBytesTests(unittest.TestCase):
-    def test_accept_header_is_enforced(self):
+    ACCEPT = "application/json, text/event-stream"
+
+    def test_accept_header_requires_both_media_types(self):
         status, _, _ = mcp_server.handle_http_bytes(b"{}", "text/html")
         self.assertEqual(status, 406)
+        status, _, _ = mcp_server.handle_http_bytes(b"{}", "application/json")
+        self.assertEqual(status, 406)
+        status, _, _ = mcp_server.handle_http_bytes(b"{}", "text/event-stream")
+        self.assertEqual(status, 406)
+
+    def test_origin_header_is_validated(self):
+        status, _, _ = mcp_server.handle_http_bytes(
+            b"{}", self.ACCEPT, origin_header="https://evil.example"
+        )
+        self.assertEqual(status, 403)
+        payload = json.dumps(rpc(1, "initialize", {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "0"},
+        })).encode()
+        status, _, _ = mcp_server.handle_http_bytes(
+            payload, self.ACCEPT, origin_header="http://127.0.0.1:8080"
+        )
+        self.assertEqual(status, 200)
+
+    def test_protocol_version_header_is_validated(self):
+        status, _, data = mcp_server.handle_http_bytes(
+            b"{}", self.ACCEPT, protocol_version_header="2024-11-05"
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(data)["error"]["code"], -32600)
 
     def test_parse_error_returns_400(self):
         status, content_type, data = mcp_server.handle_http_bytes(
-            b"not-json", "application/json, text/event-stream"
+            b"not-json", self.ACCEPT
         )
         self.assertEqual(status, 400)
         self.assertEqual(content_type, "application/json")
@@ -141,24 +170,40 @@ class McpHttpBytesTests(unittest.TestCase):
             "clientInfo": {"name": "test", "version": "0"},
         })).encode()
         status, content_type, data = mcp_server.handle_http_bytes(
-            payload, "application/json, text/event-stream"
+            payload, self.ACCEPT
         )
         self.assertEqual(status, 200)
         self.assertEqual(content_type, "application/json")
         self.assertEqual(json.loads(data)["result"]["protocolVersion"], "2025-11-25")
 
-    def test_batch_requests_are_supported(self):
+    def test_batch_requests_are_rejected(self):
         payload = json.dumps([
             rpc(1, "tools/list"),
             rpc(2, "ping"),
         ]).encode()
-        status, _, data = mcp_server.handle_http_bytes(
-            payload, "application/json, text/event-stream"
+        status, _, data = mcp_server.handle_http_bytes(payload, self.ACCEPT)
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(data)["error"]["code"], -32600)
+
+    def test_notifications_receive_no_response(self):
+        payload = json.dumps({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "params": {},
+        }).encode()
+        status, _, data = mcp_server.handle_http_bytes(payload, self.ACCEPT)
+        self.assertEqual(status, 202)
+        self.assertEqual(data, b"")
+
+    def test_schema_invalid_arguments_return_tool_error(self):
+        response = mcp_server.handle_jsonrpc(
+            rpc(11, "tools/call", {
+                "name": "pubskill_resolve_skills",
+                "arguments": {"query": "x", "limit": {}},
+            })
         )
-        self.assertEqual(status, 200)
-        responses = json.loads(data)
-        self.assertEqual(len(responses), 2)
-        self.assertEqual(responses[0]["result"]["tools"][0]["name"], "pubskill_identity")
+        self.assertTrue(response["result"]["isError"])
+        self.assertIn("limit", response["result"]["content"][0]["text"])
 
 
 class McpSelfTestTests(unittest.TestCase):
@@ -175,14 +220,18 @@ class McpSelfTestTests(unittest.TestCase):
 
 
 class FixtureReplayTests(unittest.TestCase):
-    def _expected_collection(self) -> Path:
-        version_tag = f"py{sys.version_info[0]}{sys.version_info[1]}"
-        return REPO / "examples" / "metadata-repo-expected" / f"collection-{version_tag}.json"
+    EXPECTED = REPO / "examples" / "metadata-repo-expected" / "collection-normalized.json"
 
-    def test_fixture_collection_replays_byte_for_byte(self):
-        expected = self._expected_collection()
-        if not expected.is_file():
-            self.skipTest(f"no expected fixture collection for {sys.version_info[:2]}")
+    @staticmethod
+    def _normalize(text: str) -> str:
+        import re
+        return re.sub(
+            r'"version": "Python \d+\.\d+(\.\d+)?"',
+            '"version": "Python <normalized>"',
+            text,
+        )
+
+    def _generate_normalized(self, output: Path) -> None:
         env = dict(os.environ)
         pythonpath = str(SKILLS)
         if env.get("PYTHONPATH"):
@@ -201,8 +250,7 @@ class FixtureReplayTests(unittest.TestCase):
                 "--strict",
                 "--json",
                 "--out",
-                str(expected),
-                "--check",
+                str(output),
             ],
             cwd=REPO,
             capture_output=True,
@@ -211,11 +259,16 @@ class FixtureReplayTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_fixture_collection_replays_byte_for_byte(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "collection.json"
+            self._generate_normalized(output)
+            generated = self._normalize(output.read_text(encoding="utf-8"))
+            expected = self.EXPECTED.read_text(encoding="utf-8")
+            self.assertEqual(generated, expected)
+
     def test_fixture_collection_has_schema2_facts_and_declarations(self):
-        expected = self._expected_collection()
-        if not expected.is_file():
-            self.skipTest(f"no expected fixture collection for {sys.version_info[:2]}")
-        collection = json.loads(expected.read_text(encoding="utf-8"))
+        collection = json.loads(self.EXPECTED.read_text(encoding="utf-8"))
         self.assertEqual(collection["schema"], "the-interdependency.msdmd-collection")
         self.assertEqual(collection["schema_version"], "2.0.0")
         self.assertEqual(collection["source"]["revision_kind"], "content-snapshot")

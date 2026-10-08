@@ -80,12 +80,27 @@ def _head_of(root: Path) -> str | None:
         return None
 
 
+def _is_clean(root: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        return result.returncode == 0 and not result.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def verified_metapat_root() -> Path | None:
-    """Return a METAPAT checkout only when its HEAD is the exact pinned commit."""
+    """Return a METAPAT checkout only when its HEAD is the exact pinned commit
+    and the worktree is clean; dirty checkouts fail closed as unverified."""
     for root in candidate_roots():
         if not (root / METAPAT_PACKAGE).is_dir():
             continue
-        if _head_of(root) == METAPAT_COMMIT:
+        if _head_of(root) == METAPAT_COMMIT and _is_clean(root):
             return root
     return None
 

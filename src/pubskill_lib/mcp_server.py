@@ -7,14 +7,18 @@ maintains no second catalog and performs no collection of its own.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any
+from urllib.parse import urlsplit
 
 from . import __version__, api, metapat_adapter
 from .acquisition import AcquisitionError
 from .collections import CollectionError
+from .metapat_adapter import MetapatUnavailable
 
 PROTOCOL_VERSION = "2025-11-25"
+SUPPORTED_PROTOCOL_VERSIONS = {PROTOCOL_VERSION}
 SERVER_NAME = "pubskill-lib"
 
 JSONRPC_PARSE_ERROR = -32700
@@ -22,6 +26,8 @@ JSONRPC_INVALID_REQUEST = -32600
 JSONRPC_METHOD_NOT_FOUND = -32601
 JSONRPC_INVALID_PARAMS = -32602
 JSONRPC_INTERNAL_ERROR = -32603
+
+DEFAULT_ALLOWED_ORIGIN_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -109,14 +115,56 @@ TOOLS: list[dict[str, Any]] = [
 ]
 
 
+def _metapat_evidence_schema() -> dict:
+    string = {"type": "string", "minLength": 1}
+    string_array = {"type": "array", "items": {"type": "string"}}
+    optional_bool = {"type": ["boolean", "null"]}
+    return {
+        "type": "object",
+        "properties": {
+            "source_domain": string,
+            "target_domain": string,
+            "source_origin_id": string,
+            "target_origin_id": string,
+            "source_path_id": string,
+            "target_path_id": string,
+            "declared_invariants": string_array,
+            "preserved_invariants": string_array,
+            "mapping_complete": optional_bool,
+            "replay_passed": optional_bool,
+            "catalog_version": string,
+            "catalog_digest": string,
+            "catalog_module_ids": string_array,
+            "equivalence_proof_id": {"type": ["string", "null"]},
+            "shared_ancestry": string_array,
+            "ancestry_resolved": {"type": "boolean"},
+            "unresolved": string_array,
+        },
+        "required": [
+            "source_domain",
+            "target_domain",
+            "source_origin_id",
+            "target_origin_id",
+            "source_path_id",
+            "target_path_id",
+            "declared_invariants",
+            "preserved_invariants",
+            "mapping_complete",
+            "replay_passed",
+            "catalog_version",
+            "catalog_digest",
+            "catalog_module_ids",
+        ],
+        "additionalProperties": False,
+    }
+
+
 METAPAT_TOOL = {
     "name": "pubskill_classify_recurrence",
     "description": "Adjudicate one fully typed METAPAT cross-domain structural-recurrence evidence record through the exact-pin, digest-checked optional adapter. Requires the METAPAT adapter to be enabled.",
     "inputSchema": {
         "type": "object",
-        "properties": {
-            "evidence": {"type": "object"},
-        },
+        "properties": {"evidence": _metapat_evidence_schema()},
         "required": ["evidence"],
         "additionalProperties": False,
     },
@@ -149,10 +197,72 @@ def _tool_content(text: str, *, is_error: bool = False) -> dict:
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
-def call_tool(name: str, arguments: dict) -> dict:
-    """Execute one pubskill MCP tool against the shared application layer."""
+def _require_str(arguments: dict, name: str) -> None:
+    if name in arguments and not isinstance(arguments[name], str):
+        raise ValueError(f"{name} must be a string")
+
+
+def _require_optional_str(arguments: dict, name: str) -> None:
+    _require_str(arguments, name)
+
+
+def _require_str_list(arguments: dict, name: str) -> None:
+    if name not in arguments:
+        return
+    value = arguments[name]
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"{name} must be an array of strings")
+
+
+def _validate_arguments(name: str, arguments: dict) -> dict:
+    """Validate tool arguments against the published schemas before dispatch."""
     if not isinstance(arguments, dict):
         raise ValueError("tool arguments must be a JSON object")
+    if name == "pubskill_identity" or name == "pubskill_list_skills":
+        if arguments:
+            raise ValueError("this tool takes no arguments")
+    elif name == "pubskill_get_skill":
+        _require_str(arguments, "name")
+    elif name == "pubskill_get_resource":
+        _require_str(arguments, "name")
+        _require_str(arguments, "path")
+    elif name == "pubskill_collect_metadata":
+        _require_str(arguments, "repo_url")
+        _require_optional_str(arguments, "revision")
+        _require_str_list(arguments, "require_sources")
+        _require_str_list(arguments, "require_facts")
+    elif name == "pubskill_query_metadata":
+        if "collection" in arguments and not isinstance(arguments["collection"], dict):
+            raise ValueError("collection must be an object")
+        for key in ("repo_url", "revision", "convention", "fact_kind", "standing", "subject_contains", "path_glob", "diagnostic_status"):
+            _require_optional_str(arguments, key)
+        if "diagnostics_only" in arguments and not isinstance(arguments["diagnostics_only"], bool):
+            raise ValueError("diagnostics_only must be a boolean")
+        if "limit" in arguments and (
+            not isinstance(arguments["limit"], int)
+            or isinstance(arguments["limit"], bool)
+            or not 1 <= arguments["limit"] <= 1000
+        ):
+            raise ValueError("limit must be an integer between 1 and 1000")
+    elif name == "pubskill_resolve_skills":
+        _require_str(arguments, "query")
+        if "limit" in arguments and (
+            not isinstance(arguments["limit"], int)
+            or isinstance(arguments["limit"], bool)
+            or not 1 <= arguments["limit"] <= 50
+        ):
+            raise ValueError("limit must be an integer between 1 and 50")
+    elif name == "pubskill_classify_recurrence":
+        if "evidence" not in arguments or not isinstance(arguments["evidence"], dict):
+            raise ValueError("evidence must be an object")
+    else:
+        raise ValueError(f"unknown tool: {name}")
+    return arguments
+
+
+def call_tool(name: str, arguments: dict) -> dict:
+    """Execute one pubskill MCP tool against the shared application layer."""
+    arguments = _validate_arguments(name, arguments)
     tool_names = {tool["name"] for tool in tool_schemas()}
     if name not in tool_names:
         raise ValueError(f"unknown tool: {name}")
@@ -206,11 +316,21 @@ def handle_jsonrpc(payload: dict) -> dict | None:
     if not isinstance(method, str):
         raise ValueError("missing JSON-RPC method")
     request_id = payload.get("id")
+    is_notification = "id" not in payload
     params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
 
+    def respond(result: dict) -> dict | None:
+        if is_notification:
+            return None
+        return _jsonrpc_result(request_id, result)
+
+    def respond_error(code: int, message: str) -> dict | None:
+        if is_notification:
+            return None
+        return _jsonrpc_error(request_id, code, message)
+
     if method == "initialize":
-        return _jsonrpc_result(
-            request_id,
+        return respond(
             {
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
@@ -220,55 +340,80 @@ def handle_jsonrpc(payload: dict) -> dict | None:
                     "MSDMD collection/query as MCP tools. Schema-1 /inspect "
                     "remains a separate HTTP contract."
                 ),
-            },
+            }
         )
     if method == "notifications/initialized":
         return None
     if method == "ping":
-        return _jsonrpc_result(request_id, {})
+        return respond({})
     if method == "tools/list":
-        return _jsonrpc_result(request_id, {"tools": tool_schemas()})
+        return respond({"tools": tool_schemas()})
     if method == "tools/call":
         if not isinstance(params, dict) or not isinstance(params.get("name"), str):
-            raise ValueError("tools/call requires a tool name")
+            return respond_error(JSONRPC_INVALID_PARAMS, "tools/call requires a tool name")
         try:
-            return _jsonrpc_result(request_id, call_tool(params["name"], params.get("arguments", {})))
-        except (KeyError, ValueError, AcquisitionError, CollectionError) as error:
-            return _jsonrpc_result(
-                request_id,
-                _tool_content(str(error) or "invalid tool arguments", is_error=True),
-            )
-    return _jsonrpc_error(request_id, JSONRPC_METHOD_NOT_FOUND, f"method not found: {method}")
+            return respond(call_tool(params["name"], params.get("arguments", {})))
+        except (KeyError, ValueError, AcquisitionError, CollectionError, MetapatUnavailable) as error:
+            return respond(_tool_content(str(error) or "invalid tool arguments", is_error=True))
+    return respond_error(JSONRPC_METHOD_NOT_FOUND, f"method not found: {method}")
 
 
-def handle_http_bytes(body: bytes, accept_header: str = "") -> tuple[int, str, bytes]:
+def _origin_allowed(origin_header: str | None) -> bool:
+    if not origin_header:
+        return True  # non-browser clients are not required to send Origin
+    allowed_extra = {
+        item.strip()
+        for item in os.environ.get("PUBSKILL_ALLOWED_ORIGINS", "").split(",")
+        if item.strip()
+    }
+    if origin_header in allowed_extra:
+        return True
+    try:
+        hostname = urlsplit(origin_header).hostname
+    except ValueError:
+        return False
+    return hostname in DEFAULT_ALLOWED_ORIGIN_HOSTS
+
+
+def handle_http_bytes(
+    body: bytes,
+    accept_header: str = "",
+    origin_header: str | None = None,
+    protocol_version_header: str | None = None,
+) -> tuple[int, str, bytes]:
     """Handle one MCP Streamable HTTP request body.
 
     Returns (status, content_type, response_body). The transport is stateless;
     the server assigns no session id.
     """
-    accepts = [part.split(";")[0].strip() for part in accept_header.split(",")]
-    if not ({"application/json", "text/event-stream"} & set(accepts)):
-        return 406, "application/json", b'{"error":"Accept must include application/json or text/event-stream"}'
+    if not _origin_allowed(origin_header):
+        return 403, "application/json", b'{"error":"Origin is not allowed"}'
+    if protocol_version_header and protocol_version_header not in SUPPORTED_PROTOCOL_VERSIONS:
+        error = _jsonrpc_error(None, JSONRPC_INVALID_REQUEST, f"unsupported MCP protocol version: {protocol_version_header}")
+        return 400, "application/json", json.dumps(error).encode()
+    accepts = {part.split(";")[0].strip() for part in accept_header.split(",")}
+    if not {"application/json", "text/event-stream"}.issubset(accepts):
+        return 406, "application/json", b'{"error":"Accept must include application/json and text/event-stream"}'
     try:
         payload = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         error = _jsonrpc_error(None, JSONRPC_PARSE_ERROR, "parse error")
         return 400, "application/json", json.dumps(error).encode()
+    if isinstance(payload, list):
+        error = _jsonrpc_error(None, JSONRPC_INVALID_REQUEST, "batch JSON-RPC requests are not supported")
+        return 400, "application/json", json.dumps(error).encode()
     try:
-        if isinstance(payload, list):
-            responses = [item for item in (handle_jsonrpc(item) for item in payload) if item is not None]
-            data = json.dumps(responses, ensure_ascii=False).encode()
-        else:
-            response = handle_jsonrpc(payload)
-            if response is None:
-                return 202, "application/json", b""
-            data = json.dumps(response, ensure_ascii=False).encode()
+        response = handle_jsonrpc(payload)
     except ValueError as error:
-        error_response = _jsonrpc_error(payload.get("id") if isinstance(payload, dict) else None, JSONRPC_INVALID_REQUEST, str(error) or "invalid request")
-        data = json.dumps(error_response, ensure_ascii=False).encode()
-        return 400, "application/json", data
-    return 200, "application/json", data
+        error_response = _jsonrpc_error(
+            payload.get("id") if isinstance(payload, dict) else None,
+            JSONRPC_INVALID_REQUEST,
+            str(error) or "invalid request",
+        )
+        return 400, "application/json", json.dumps(error_response).encode()
+    if response is None:
+        return 202, "application/json", b""
+    return 200, "application/json", json.dumps(response, ensure_ascii=False).encode()
 
 
 class McpHandler:
@@ -283,8 +428,13 @@ class McpHandler:
             start_response("400 Bad Request", [("Content-Type", "application/json")])
             return [b'{"error":"invalid request body"}']
         body = environ["wsgi.input"].read(length)
-        status, content_type, data = handle_http_bytes(body, environ.get("HTTP_ACCEPT", ""))
-        reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 406: "Not Acceptable"}.get(status, "OK")
+        status, content_type, data = handle_http_bytes(
+            body,
+            environ.get("HTTP_ACCEPT", ""),
+            environ.get("HTTP_ORIGIN"),
+            environ.get("HTTP_MCP_PROTOCOL_VERSION"),
+        )
+        reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 403: "Forbidden", 406: "Not Acceptable"}.get(status, "OK")
         start_response(f"{status} {reason}", [("Content-Type", content_type), ("Cache-Control", "no-store")])
         return [data]
 
@@ -317,6 +467,9 @@ def _self_test() -> int:
     called = handle_jsonrpc({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "pubskill_collect_metadata", "arguments": {"repo_url": "https://example.com/owner/repo"}}})
     checks.append(("tools/call collect rejects disallowed host", called["result"]["isError"] is True))
 
+    bad_arguments = handle_jsonrpc({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "pubskill_resolve_skills", "arguments": {"query": "x", "limit": {}}}})
+    checks.append(("tools/call rejects schema-invalid arguments as tool errors", bad_arguments["result"]["isError"] is True))
+
     failed = 0
     for label, passed in checks:
         print(f"{'PASS' if passed else 'FAIL'}: {label}")
@@ -343,7 +496,10 @@ def main(argv: list[str] | None = None) -> int:
                 self.wfile.write(b'{"error":"invalid request body"}')
                 return
             status, content_type, data = handle_http_bytes(
-                self.rfile.read(length), self.headers.get("Accept", "")
+                self.rfile.read(length),
+                self.headers.get("Accept", ""),
+                self.headers.get("Origin"),
+                self.headers.get("MCP-Protocol-Version"),
             )
             self.send_response(status)
             self.send_header("Content-Type", content_type)

@@ -23,6 +23,21 @@ def reject_unknown_fields(data: object, allowed: set[str], name: str) -> dict:
     return data
 
 
+def _is_valid_collection(collection: object) -> bool:
+    """Structural validation for caller-supplied schema-2 collections."""
+    if not isinstance(collection, dict):
+        return False
+    if collection.get("schema") != "the-interdependency.msdmd-collection":
+        return False
+    if collection.get("schema_version") != "2.0.0":
+        return False
+    for key in ("facts", "declarations", "edges", "diagnostics"):
+        value = collection.get(key, [])
+        if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+            return False
+    return True
+
+
 def v1_identity() -> dict:
     return response_envelope(
         "identity",
@@ -71,15 +86,15 @@ def v1_collect(
     revision: str | None = None,
     require_sources: tuple[str, ...] = (),
     require_facts: tuple[str, ...] = (),
-    limits: dict | None = None,
 ) -> dict:
     """Acquire one allowed repository and collect schema-2 MSDMD metadata.
 
-    The repository worktree exists only while the receipt and collection are
-    built; it is deleted before this function returns.
+    Acquisition limits are always the server defaults; callers cannot override
+    them. The repository worktree exists only while the receipt and collection
+    are built; it is deleted before this function returns.
     """
     input_identity = {"repo_url": repo_url, "revision": revision}
-    with acquire_repository(repo_url, revision=revision, limits=limits) as acquired:
+    with acquire_repository(repo_url, revision=revision) as acquired:
         receipt = receipt_header(acquired)
         collection_result = collections_module.collect_metadata(
             acquired.path,
@@ -89,6 +104,7 @@ def v1_collect(
             max_file_bytes=acquired.limits["max_per_file_bytes"],
             require_sources=require_sources,
             require_facts=require_facts,
+            max_output_chars=acquired.limits["max_collection_output_chars"],
         )
         receipt["collection"] = {
             "schema": collection_result.collection.get("schema"),
@@ -129,8 +145,8 @@ def v1_query(
         collected = v1_collect(repo_url, revision)
         collection = collected["collection"]
     else:
-        if not isinstance(collection, dict) or collection.get("schema") != "the-interdependency.msdmd-collection":
-            raise ValueError("collection is not a schema-2 MSDMD collection")
+        if not _is_valid_collection(collection):
+            raise ValueError("collection is not a valid schema-2 MSDMD collection")
         input_identity = {"collection_schema": collection.get("schema")}
 
     result = queries_module.query_collection(
