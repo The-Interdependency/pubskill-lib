@@ -1,0 +1,248 @@
+"""Schema-2 MSDMD collection through the canonical vendored implementation.
+
+The collector is invoked as the vendored ``msdmd.collect`` module over a
+bounded local checkout. It is never copied or rewritten here; missing optional
+reader runtimes surface as unsupported-reader diagnostics from the canonical
+implementation, never as empty success.
+"""
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+from .identity import skills_root
+
+DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
+DEFAULT_COLLECT_TIMEOUT_SECONDS = 180
+DEFAULT_MAX_OUTPUT_CHARS = 8 * 1024 * 1024
+MSDMD_SCHEMA = "the-interdependency.msdmd-collection"
+MSDMD_SCHEMA_VERSION = "2.0.0"
+
+
+class CollectionError(RuntimeError):
+    """Schema-2 collection produced errors or could not be validated."""
+
+
+class CollectionTimeoutError(CollectionError):
+    """Schema-2 collection exceeded a configured time bound."""
+
+
+@dataclass(frozen=True)
+class CollectionResult:
+    collection: dict
+    command: list[str]
+    returncode: int
+    stderr: str
+
+
+def runtime_status() -> dict:
+    """Preflight: which declared reader runtimes are present in this build."""
+    python_runtimes = {}
+    for module_name in (
+        "yaml",
+        "docstring_parser",
+        "tree_sitter",
+        "tree_sitter_rust",
+        "tree_sitter_java",
+        "tree_sitter_c",
+        "tree_sitter_cpp",
+    ):
+        python_runtimes[module_name] = importlib.util.find_spec(module_name) is not None
+
+    node = shutil.which("node")
+    tsc = None
+    if node:
+        candidate = skills_root() / "msdmd" / "node_modules" / "typescript" / "bin" / "tsc"
+        tsc = str(candidate) if candidate.is_file() else None
+
+    return {
+        "python_runtimes": python_runtimes,
+        "node": node,
+        "typescript_tsc": tsc,
+        "declared": {
+            "python": sorted(python_runtimes),
+            "node_typescript": "msdmd/package.json",
+        },
+        "missing": [name for name, present in python_runtimes.items() if not present],
+    }
+
+
+def _resolve_git_commit(root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        return result.stdout.strip() if result.returncode == 0 else "hmmm"
+    except (OSError, subprocess.TimeoutExpired):
+        return "hmmm"
+
+
+def _run_collector_capped(
+    command: list[str],
+    *,
+    env: dict,
+    timeout_seconds: int,
+    max_output_chars: int,
+) -> tuple[int, str, str]:
+    """Run the collector while enforcing a hard cap on buffered output.
+
+    stdout and stderr are spooled to temporary files, and a monitor thread
+    terminates the collector as soon as the declared output cap is crossed, so
+    a metadata-rich repository cannot force unbounded response buffering.
+    """
+    max_bytes = max(1, max_output_chars)  # UTF-8 bytes are >= chars; byte cap is conservative
+    with tempfile.TemporaryFile() as out_file, tempfile.TemporaryFile() as err_file:
+        process = subprocess.Popen(
+            command,
+            stdout=out_file,
+            stderr=err_file,
+            env=env,
+        )
+        exceeded: list[bool] = []
+
+        def monitor() -> None:
+            while process.poll() is None:
+                if out_file.tell() > max_bytes:
+                    exceeded.append(True)
+                    process.kill()
+                    return
+                time.sleep(0.1)
+
+        thread = threading.Thread(target=monitor, daemon=True)
+        thread.start()
+        try:
+            process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as error:
+            process.kill()
+            process.wait()
+            raise CollectionTimeoutError(f"collection timed out after {timeout_seconds}s") from error
+        finally:
+            thread.join(timeout=1)
+        out_file.seek(0)
+        err_file.seek(0)
+        stdout = out_file.read()
+        stderr = err_file.read()
+    if exceeded or len(stdout) > max_bytes:
+        raise CollectionError(
+            f"collection output exceeded {max_output_chars} chars and was rejected"
+        )
+    return process.returncode, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
+
+
+def collect_metadata(
+    root: Path,
+    repo: str,
+    *,
+    revision: str | None = None,
+    strict: bool = True,
+    max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    require_sources: tuple[str, ...] = (),
+    require_facts: tuple[str, ...] = (),
+    timeout_seconds: int = DEFAULT_COLLECT_TIMEOUT_SECONDS,
+    max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS,
+) -> CollectionResult:
+    """Run the canonical schema-2 collector over a local checkout.
+
+    The inspected repository is never imported, executed, or installed by this
+    function; the canonical collector reads source bytes only.
+    """
+    root = root.resolve()
+    if not root.is_dir():
+        raise ValueError(f"not a directory: {root}")
+    if not repo or any(char in repo for char in ("\x00", "\n")):
+        raise ValueError("invalid repository slug")
+
+    skills = skills_root()
+    if not (skills / "msdmd" / "collect.py").is_file():
+        raise RuntimeError(f"canonical msdmd collector missing under {skills}")
+
+    env = dict(os.environ)
+    pythonpath = str(skills)
+    if env.get("PYTHONPATH"):
+        pythonpath += os.pathsep + env["PYTHONPATH"]
+    env["PYTHONPATH"] = pythonpath
+
+    command = [
+        sys.executable,
+        "-m",
+        "msdmd.collect",
+        "--root",
+        str(root),
+        "--repo",
+        repo,
+        "--json",
+        "--max-file-bytes",
+        str(max_file_bytes),
+    ]
+    detected_commit = _resolve_git_commit(root)
+    if revision:
+        command += ["--source-commit", revision]
+    elif detected_commit != "hmmm":
+        command += ["--source-commit", detected_commit]
+    else:
+        # No git identity available: bind facts to the exact source bytes
+        # instead of a commit. The canonical collector forbids selecting both.
+        command += ["--snapshot-identity"]
+    for pattern in require_sources:
+        command += ["--require-source", pattern]
+    for requirement in require_facts:
+        command += ["--require-fact", requirement]
+    if strict:
+        command.append("--strict")
+
+    returncode, stdout, stderr = _run_collector_capped(
+        command,
+        env=env,
+        timeout_seconds=timeout_seconds,
+        max_output_chars=max_output_chars,
+    )
+
+    if returncode not in (0, 2):
+        raise CollectionError(
+            f"collector exited {returncode}: {stderr.strip()[:4000]}"
+        )
+
+    try:
+        collection = json.loads(stdout)
+    except json.JSONDecodeError as error:
+        raise CollectionError(
+            f"collector emitted invalid JSON: {error}; stderr: {stderr.strip()[:2000]}"
+        ) from error
+
+    if collection.get("schema") != MSDMD_SCHEMA:
+        raise CollectionError(f"unexpected collection schema: {collection.get('schema')}")
+    if collection.get("schema_version") != MSDMD_SCHEMA_VERSION:
+        raise CollectionError(
+            f"unexpected collection schema version: {collection.get('schema_version')}"
+        )
+
+    result = CollectionResult(
+        collection=collection,
+        command=command,
+        returncode=returncode,
+        stderr=stderr,
+    )
+    if strict and returncode == 2:
+        errors = [
+            item
+            for item in collection.get("diagnostics", [])
+            if item.get("severity") == "error"
+        ]
+        raise CollectionError(
+            "strict collection failed with error diagnostics: "
+            + json.dumps(errors, ensure_ascii=False)[:4000]
+        )
+    return result

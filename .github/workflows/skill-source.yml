@@ -19,7 +19,7 @@ jobs:
           ref: 9867ab33877f2b1f50f8a501cf379aa99360bd52
           path: canonical
           persist-credentials: false
-      - name: Verify publication identity and complete public slice
+      - name: Verify publication identity and complete catalog parity
         run: |
           python - <<'PY'
           import json, subprocess
@@ -29,9 +29,21 @@ jobs:
           assert source['schema'] == 'pubskill-lib.source' and source['version'] == 1
           actual = subprocess.check_output(['git', '-C', 'canonical', 'rev-parse', 'HEAD'], text=True).strip()
           assert source['commit'] == actual, 'publication metadata differs from trusted producer checkout'
+          index = json.loads(Path('canonical/skills.json').read_text())
+          names = [entry['name'] for entry in index['skills']]
+          assert len(names) == len(set(names)), 'producer index has duplicate skill names'
+          catalog = json.loads(Path('consumer/.agents/skills/catalog.json').read_text())
+          assert catalog['schema'] == 'pubskill-lib.catalog'
+          assert catalog['producer']['commit'] == actual
+          assert [item['name'] for item in catalog['skills']] == names, 'catalog order diverges from producer index'
+          assert catalog['skill_count'] == len(names) == 44
           PY
-          diff -ru canonical/msdmd consumer/.agents/skills/msdmd
-          diff -ru canonical/repo-audit-repair consumer/.agents/skills/repo-audit-repair
-          cmp canonical/doctrine/msdmd-checks.md consumer/.agents/skills/doctrine/msdmd-checks.md
+          cmp canonical/skills.json consumer/.agents/skills/skills.json
+          for name in $(python -c 'import json; print(" ".join(e["name"] for e in json.load(open("canonical/skills.json"))["skills"]))'); do
+            diff -ru "canonical/$name" "consumer/.agents/skills/$name"
+          done
+          diff -ru canonical/doctrine consumer/.agents/skills/doctrine
           cmp canonical/msdmd/parsers/universal.py consumer/src/pubskill_lib/_msdmd_universal.py
+          python consumer/tools/build_catalog.py --out /tmp/pubskill-catalog.json
+          cmp /tmp/pubskill-catalog.json consumer/.agents/skills/catalog.json
           git -C consumer diff --exit-code

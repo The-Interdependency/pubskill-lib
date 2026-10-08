@@ -5,6 +5,75 @@ The hosted surface at `https://pubskill.interdependentway.org/` exposes two trut
 - **Inspection:** What obvious repository defects and unresolved static boundaries can be found without executing the repository?
 - **Examiner:** What is actually in this codebase, how is it structured and documented, what can be measured safely, and where are the unresolved boundaries?
 
+A versioned read-only API adds catalog retrieval and schema-2 MSDMD
+collection/query over bounded public-repository acquisition:
+
+- `GET /v1/identity`
+- `GET /v1/skills`
+- `GET /v1/skills/{name}`
+- `GET /v1/skills/{name}/resource?path=...`
+- `POST /v1/skills/resolve`
+- `POST /v1/msdmd/collect`
+- `POST /v1/msdmd/query`
+
+`/v1/msdmd/collect` accepts `{"repo_url": "...", "revision": "..."}`; the
+revision is optional, and every receipt returns the resolved immutable commit.
+Acquisition is bounded: allowed HTTPS Git hosts only, no credentials, no
+submodules, no git hooks, no LFS smudging, time/byte/file-count limits, and the
+temporary worktree is deleted after the receipt is built. Target code is never
+installed, executed, or instructed. Schema-1 `/inspect` and schema-2 MSDMD
+collection remain separate contracts; neither is coerced into the other.
+
+## MCP surface
+
+`POST /mcp` speaks MCP Streamable HTTP (specification `2025-11-25`) as a
+stateless JSON transport. The same application layer backs every tool; the MCP
+adapter maintains no second catalog:
+
+- `pubskill_identity`
+- `pubskill_list_skills`
+- `pubskill_get_skill`
+- `pubskill_get_resource`
+- `pubskill_collect_metadata`
+- `pubskill_query_metadata`
+- `pubskill_resolve_skills`
+
+Requests must send `Accept: application/json, text/event-stream`. A local
+client suitable for demonstrations (no Alexa+ tooling required):
+
+```bash
+python -m pubskill_lib.mcp_server --self-test
+python tools/mcp_client.py --url http://127.0.0.1:8080/mcp
+python tools/hackathon_demo.py --url http://127.0.0.1:8080/mcp --interactive
+```
+
+`tools/hackathon_demo.py` walks the submission vertical slice (identity →
+catalog → resolve → collect → query → retrieve) for screen recording; use
+`--no-collect` to run it without network access.
+
+The end-to-end fixture `examples/metadata-repo` records an exact, replayable
+schema-2 collection in `examples/metadata-repo-expected/collection-normalized.json`
+(Python reader version labels normalized); the test gate replays it byte for
+byte on every supported interpreter.
+
+## Optional METAPAT recurrence surface
+
+METAPAT classification is optional and narrower than general inference. When
+the adapter is enabled (an exact checkout of `The-Interdependency/metapat` at
+the pinned commit, exposed via `PUBSKILL_METAPAT_ROOT`), pubskill adds:
+
+- `GET /v1/metapat/catalog` — current METAPAT catalog version, digest, and
+  required module bindings
+- `POST /v1/metapat/recurrence` — adjudicate one fully typed
+  `RecurrenceEvidence` record
+- MCP tool `pubskill_classify_recurrence`
+
+The adapter enforces the exact producer commit and the current catalog digest,
+fails closed on pin mismatch, returns `HMMM` for incomplete mapping/replay/
+ancestry evidence, never verifies an equivalence proof, and keeps
+`semantic_transfer`, `proof_status_transfer`, and `measurement_status_transfer`
+exactly `false`. METAPAT canon is never copied or edited in this repository.
+
 ## Repository inspection
 
 Hosted inspection is **free**.

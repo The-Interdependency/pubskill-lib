@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pubskill-lib"
-version = "0.2.1"
+version = "0.3.0"
 description = "Public inspect CLI for evidence-led repository findings"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,4 +18,4 @@ pubskill-examine = "pubskill_lib.examine:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-pubskill_lib = ["_source.json"]
+pubskill_lib = ["_source.json", "_build.json"]

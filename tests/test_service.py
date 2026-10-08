@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import service
+from pubskill_lib.acquisition import AcquisitionError
 
 
 class ServiceBoundaryTests(unittest.TestCase):
@@ -42,13 +47,18 @@ class ServiceBoundaryTests(unittest.TestCase):
             "findings": [],
             "hmmm": [],
         }
+
+        @contextmanager
+        def fake_acquire(*args, **kwargs):
+            yield SimpleNamespace(path=Path(tempfile.gettempdir()) / "fake-repo")
+
         with (
-            patch.object(service.subprocess, "run") as run,
-            patch.object(service, "audit_path", return_value=static_result),
+            patch.object(service, "acquire_repository", side_effect=fake_acquire),
+            patch.object(service, "audit_path", return_value=static_result) as audit,
         ):
             result = service.run_inspection("https://github.com/owner/repo")
 
-        run.assert_called_once()
+        audit.assert_called_once()
         scope = result["inspection_scope"]
         self.assertTrue(scope["static_only"])
         self.assertFalse(scope["executes_target_code"])
@@ -71,10 +81,22 @@ class ServiceBoundaryTests(unittest.TestCase):
                 self.assertFalse(hasattr(service, name))
 
     def test_invalid_repository_is_rejected_before_clone(self) -> None:
-        with patch.object(service.subprocess, "run") as run:
-            with self.assertRaises(ValueError):
+        with patch("pubskill_lib.acquisition.subprocess.run") as run:
+            with self.assertRaises(AcquisitionError):
                 service.run_inspection("https://example.com/owner/repo")
         run.assert_not_called()
+
+    def test_requirement_arrays_are_capped_and_deduplicated(self) -> None:
+        self.assertEqual(
+            service._validated_requirements(["a", "b", "a"], "require_sources"),
+            ("a", "b"),
+        )
+        with self.assertRaises(ValueError):
+            service._validated_requirements([str(i) for i in range(21)], "require_sources")
+        with self.assertRaises(ValueError):
+            service._validated_requirements(["x" * 257], "require_sources")
+        with self.assertRaises(ValueError):
+            service._validated_requirements([1], "require_facts")
 
 
 if __name__ == "__main__":

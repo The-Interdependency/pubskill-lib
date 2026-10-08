@@ -1,0 +1,410 @@
+{
+  "doctrine_digest": "09b9772b39966928a9f3973605ead7cf38def550245c8e945285856b916d00d6",
+  "producer": {
+    "commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+    "repository": "The-Interdependency/skill-lib"
+  },
+  "propagated_set_digest": "6aff3b842c77cd32beab3c1ecbf74c9d2b0c85b371ae21b5fa407bf4bf5f9f94",
+  "schema": "pubskill-lib.catalog",
+  "skill_count": 44,
+  "skills": [
+    {
+      "description": "Module Self-Declared Metadata in Markdown — native-first collection of metadata already expressed by code, documentation, manifests, schemas, tooling, and evidence formats, with MSDMD blocks only for otherwise unexpressed information. Load this when creating or revising metadata-driven skills, collecting repository metadata, integrating a metadata convention, building parsers or collection consumers, or auditing metadata coverage and provenance.",
+      "digest": "07bfa4197fa4fede5b5c31b90f703dd4187b892f8411f3e53c81842b07b410cc",
+      "kind": "metadata-block",
+      "name": "msdmd",
+      "path": "msdmd/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": "runnable"
+    },
+    {
+      "description": "Native-first documentation coverage built on msdmd. Consume docstrings, documentation comments and source-linked documents; supplemental DOCS blocks express remaining obligations. A consuming runner verifies references and reports missing information separately from unsupported extraction. Load this when adding or auditing module documentation, tying code surfaces to docs, or wiring documentation coverage checks into CI.",
+      "digest": "3de64bbc734e6e8558d5a71bc3e622706ac07bf8e5fb5c55d0c5185e0b0653d2",
+      "kind": "metadata-block",
+      "name": "doc-build",
+      "path": "doc-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Native-first capability inventory built on msdmd. Consume signatures, exports, annotations and API schemas; supplemental CAPABILITIES blocks express otherwise unrecorded behavior and boundaries. Keep declared surfaces separate from verified behavior. Load this when declaring module capabilities, building capability registries for agents, or auditing exposed surfaces against declared capabilities.",
+      "digest": "0ddc97b28374159ade96217541155a5c00cefe394ba18a3645f7cd9c1836a4e5",
+      "kind": "metadata-block",
+      "name": "cap-build",
+      "path": "cap-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Native-first dependency topology built on msdmd. Consume imports, package manifests, lockfiles and build declarations at their owning scopes; supplemental DEPENDENCIES blocks express remaining architectural intent. Preserve edge kinds, conditions and resolution uncertainty. Load this when declaring dependencies, auditing architecture drift, checking graph cycles, or wiring dependency topology checks into CI.",
+      "digest": "9fdb8d9b4f9a2ceaae0466ef060ae8975df4886faaa552cf30517d7e59aa5d1d",
+      "kind": "metadata-block",
+      "name": "deps-build",
+      "path": "deps-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Native-first module stewardship built on msdmd. Consume provider-specific CODEOWNERS, OWNERS and other authoritative responsibility declarations; supplemental OWNERS blocks express missing stewardship or escalation information. Keep review assignment, operational ownership and permissions distinct. Load this when assigning module ownership, routing reviews, auditing unowned code, or wiring stewardship coverage into CI.",
+      "digest": "a93fba1e1cb8006e840c0cd5e69f783fc7d8e13dfa52343009fc4d29056b86ec",
+      "kind": "metadata-block",
+      "name": "owner-build",
+      "path": "owner-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Native-first contract evidence built on msdmd. Source owners declare behavior obligations and test owners declare accountable witnesses through supported native conventions or supplemental CONTRACTS and CHECKS blocks. Preserve explicit claim linkage and no-exec audit boundaries. Load this when adding tests that use msdmd, refactoring CONTRACTS/CHECKS declarations, or authoring a contract/check audit or executor.",
+      "digest": "904658318809f5089104fbaa09ed48123074be5a888b84be533eb27dd101110b",
+      "kind": "metadata-block",
+      "name": "test-build",
+      "path": "test-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Native-first module planning built on msdmd. Consume existing manifests, schemas and design declarations; supplemental MODULE_BUILD blocks record remaining purpose, surface, boundary, test, rollout and rollback obligations. Load this when turning a capability idea into a bounded module manifest and file plan before implementation.",
+      "digest": "2dedb45249b402fcc7d29b4e53ba96b2696d33e62ae7b680ecd73f356456f933",
+      "kind": "metadata-block",
+      "name": "meta-module-build",
+      "path": "meta-module-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Native-first runtime risk and permission boundaries built on msdmd. Consume existing permission, schema, configuration and effect declarations; supplemental BOUNDARIES blocks express otherwise missing auth, storage, network, user-data and operational effects. Declarations do not prove enforcement. Load this when touching permissions, persistence, network calls, user data, admin behavior, migrations, or other risk-bearing effects.",
+      "digest": "c981fa31661fe639f9280f9201194592aad9fbcf19e84b91e97b3f11f88456fb",
+      "kind": "metadata-block",
+      "name": "risk-boundary-build",
+      "path": "risk-boundary-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Self-declaring module composition ratios on msdmd — one comment line at a file's opening and closing source boundaries (never a fenced block), with a valid interpreter shebang allowed before the opening seal. The canonical seal is `The-Interdependency/a0`'s compact positional `N:M C:D I:O` annotation (code:comment · consumed:declared · fan-in:fan-out), computed by a0's `scripts/annotate.py`; the named `loc_comments=… imports_exports=… calls_definitions=…` line is a portable, per-file adaptation for standalone libraries, verified by the stdlib `ratios_check.py` (drift/misplacement failures, visible gaps). JSON/Markdown are out of scope. Load this when recording a module's composition ratios, when authoring or extending the ratio registry, or when wiring ratio verification into CI.",
+      "digest": "15a93123144c2a2998fb91d58c58cc2925f0580056072f35dd999e1bf9de8478",
+      "kind": "metadata-block",
+      "name": "ratios",
+      "path": "ratios/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Canonical-source and doctrine maintenance for The Interdependency skill library. Use this when deciding whether a claim, pattern, ratio, workflow, or repo-local practice should become canon; when moving source-backed behavior into a SKILL.md; when reconciling canonical skill-lib with repo-local `.agents/skills/` copies; or when preserving unresolved doctrine as `hmmm` instead of guessing.",
+      "digest": "5b249b1e22791995d19482952ed310c1bf315ef7a3da48703e14841710512aa2",
+      "kind": "procedural",
+      "name": "canon",
+      "path": "canon/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Domain-first lexical and semantic governance for canonical terms. Load this when a word or phrase is being promoted into a theorem term, ontology primitive, schema field, encoding label, skill doctrine, cross-domain mapping, or other meaning-bearing control surface; when multiple domains use the same word differently; when an acronym, initialism, symbol, or compact handle is being mistaken for a fixed expansion or definition; or when conversational provenance is about to be attached to a definition. Do not load for ordinary prose, casual wording choices, or simple dictionary explanations that will not control canon or structure.",
+      "digest": "df7816f5f8998a9ee934306e097ea65b4a4c838de755b8ab00e3f03ac70a8889",
+      "kind": "procedural",
+      "name": "domain-claims",
+      "path": "domain-claims/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Living-spec generator. Derives the mechanical, observable facts of a repo (package name, version, description, license, authors, repository, build backend, development status, supported Python versions, keywords, runtime dependencies, optional extras, top-level layout, CI workflows) from pyproject.toml + the file tree and splices them into a machine-owned, marked block inside CLAUDE.md — keeping the doc from silently drifting from the code. Ships a stdlib-only generator with --write (refresh), --check (CI drift gate), and --print modes. Load this when: setting up or maintaining a CLAUDE.md / AGENTS.md so its factual half is generated rather than hand-typed; wiring a CI check that fails when docs drift from pyproject/version/deps/layout; deciding which parts of a doc to generate vs. hand-author; or onboarding a new org repo to the living-spec convention.",
+      "digest": "a33adeb781ff06d269791d3832a0fd2f4ca8858fb66209d01f9b265e37e5024f",
+      "kind": "metadata-block",
+      "name": "manifest",
+      "path": "manifest/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Native-first LLM instruction publication built on msdmd. Consume source-owned instruction metadata without requiring a second copy; the shipped stdlib runner generates llms.txt from LLMS blocks, while native-reader integration remains a contract. Load this when creating, updating, or maintaining llms.txt for repositories consumed by LLMs or agents.",
+      "digest": "7d0b3034822a86890a6af5369ae1a419277503ba19b27fc740d0c8fc2cf0316e",
+      "kind": "metadata-block",
+      "name": "llms-build",
+      "path": "llms-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Character-based context compression for agent handoff and skill writing, owned as a skill-lib procedure rather than current UCNS mathematics. Use this when compressing a long thread, document, repo audit, canon handoff, or agent working-memory state; when a context window is filling and operative facts must survive; when writing a SKILL.md that should be flesh-dense and bone-sparse; or when checking whether a compression deleted negation, order, quantifier, operator, named object, value, decision, or unresolved hmmm. Historical bone/flesh and text-stack terminology is local compression notation, not a UCNS theorem/status transfer, active language-construction authority, or edcmbone metric implementation.",
+      "digest": "a373dc9e6df4af997a103f788ac28bc85cdbd6360b2aa4fdc67a8f801056787b",
+      "kind": "procedural",
+      "name": "char-compress",
+      "path": "char-compress/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Onboarding tour for visitors arriving at any The-Interdependency repo. Load this when an unfamiliar user asks \"what is this?\", \"what is The Interdependency?\", \"how do these repos fit together?\", \"where do I start?\", or otherwise signals they are new to the org. Gives the agent a consistent, repo-aware way to orient a newcomer without inventing facts.",
+      "digest": "d0e5ddd9d864bf7aad2bb8f1cd2b8605d7923c98c0a4fae85a9e6a5ba517a28f",
+      "kind": "procedural",
+      "name": "visitor-intro",
+      "path": "visitor-intro/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Adaptive, context-first interviewing for recovering missing information without making the user answer a questionnaire. Load this when a task requires eliciting facts, preferences, requirements, incident details, form fields, debugging context, or other missing inputs across turns; when prior conversation, files, connected sources, or authoritative records may already answer part of the question set; or when the user asks to be interviewed one question at a time. Do not load for a one-shot clarification that can be asked and resolved in a single ordinary prompt.",
+      "digest": "c6302beb7dd53355aeb331bbef7fb6c2cef73fcf4acd61966a85af272d03c3ca",
+      "kind": "procedural",
+      "name": "adaptive-elicitation",
+      "path": "adaptive-elicitation/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Methodology for instantiating, forking, running, merging, and retiring agents in the a0 platform and its near-identical mirror a0ucns. Load this when adding or changing a sub-agent spawn path, a PCNA instance fork/merge, an agent definition or naming scheme, spawn caps or approval gating, an agent run/log table, a heartbeat-driven agent task, or a checkpoint of agent state. Use it before writing any code that creates, addresses, schedules, or tears down an agent or sub-agent, so the new code follows the platform's existing lifecycle, fork/merge, identity, and gating contracts rather than inventing a parallel one. NOTE — a0-betatest (a0p) has diverged to a different per-user CRUD + native-ZFAE instancing model — this skill's spawn/fork/merge sequence does NOT apply there; see \"a0-betatest divergence\".",
+      "digest": "98d9fd53fa80dc0f22a422c4ae8b4752e93e32eacef6da61ee446f6b624771dc",
+      "kind": "procedural",
+      "name": "agent-instantiation",
+      "path": "agent-instantiation/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Methodology for instancing agents in a0-betatest (the a0p research instrument), whose model diverges from canonical a0. Load this when adding or changing an AgentInstance / CharacterSheet CRUD path, a per-instance native ZFAE weight bank or its training/distillation loop, a ZFAE inference mode, a sentinel evaluation or pending-override gate, a per-agent safetensors checkpoint, or volatile sub-context memory — anywhere under a0-betatest `backend/`. Use it before writing code that creates, addresses, trains, runs, governs, or persists an a0p agent, so the code follows a0p's per-user CRUD + native-ZFAE + sentinel model instead of a0's spawn/fork/merge model. For canonical a0 and its mirror a0ucns, use `agent-instantiation` instead — a0p does NOT have `sub_agent_spawn`, a spawn executor, or `InstanceMerge`.",
+      "digest": "d97652b5a30f9bdf84b317e92354f34873a0d50b17fd7ad6f9cebcabc24179ba",
+      "kind": "procedural",
+      "name": "a0p-instancing",
+      "path": "a0p-instancing/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Building a plain-language, multi-lens companion view of dense canonical text — an easier on-ramp that does not replace or talk down to the source. Load this when you are asked to make an informationally dense document (canon, spec, articles, legal/normative text) easier to approach for newcomers; when building an \"explain it through the lens of X\" selector (domain, audience, or role); when designing progressive-disclosure or layered ELI-not-stupid reading UX; when a dynamic, data-driven site must keep its existing static page as a graceful fallback; or when you need an EDCM-style two-speaker tension reading between a body text and its footnotes/caveats. Use this when the risk is either drowning readers in density or insulting them with oversimplification.",
+      "digest": "e7471b5601c64bd643a08cfc9959c9479f49b3b9782e28b2b1927f7b37975271",
+      "kind": "procedural",
+      "name": "plain-lens",
+      "path": "plain-lens/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Translate raw, context-heavy, recursive, fragmentary, coined, or private-language thought into audience-legible language without changing the underlying claim. Load this when a user says people do not understand what they mean; asks to make a thought understandable to strangers, the public, a specific audience, or a platform; supplies dense notes rather than finished prose; needs jargon or coined terms introduced only after their ordinary-language meaning lands; or wants multiple audience/surface renderings from one thought. Do not load merely to polish finished prose or to simplify an already-stable canonical document; use ordinary editing for the former and plain-lens for the latter.",
+      "digest": "4c79dd52aa85750550a635f8bfe57e03cc8376f191a967335b9725a093da7bce",
+      "kind": "procedural",
+      "name": "thought-lens",
+      "path": "thought-lens/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "METAPAT consultation router for The Interdependency. Load this when deciding which distinctions, relations, boundaries, transformations, scales, or cross-domain correspondences should organize downstream work; when examining available observations or metrics to determine which questions and projections are worth measuring; when the-interdependency skill's METAPAT consultation gate triggers; when an unresolved conceptual choice would constrain architecture, semantics, measurement, ontology, or later claims; or when explicitly asked to consult, apply, or interpret current METAPAT. Do not load merely for routine implementation under already-fixed conceptual contracts.",
+      "digest": "eba8486a5dfb6cf14f0c90769aa4804d85686a2751c66cc5f330b01a72b9d1ba",
+      "kind": "procedural",
+      "name": "meta",
+      "path": "meta/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Construction, closure, and replay discipline for active gonol-language research. Load this when building or reviewing language constructions made from UCNS gonol objects in The-Interdependency/stack, or when checking closure, atomic participation, provenance, replay, and unresolved geometry boundaries. UCNS owns gonol objects, constructors, and geometry; Stack owns active construction research; EDCM owns measurement/evaluation only. Closed gonols participate atomically at admissible consuming scales; no universal adjacent-scale ladder is required. Pronunciation is not required unless an explicitly declared construction makes it part of the build. Do not load for unrelated geometry, ordinary prose editing, or measurement over already-closed gonols.",
+      "digest": "9e10d815c78cbe0818807033ebe9a4294d3715909717dc8f6a76be51742f0eaa",
+      "kind": "procedural",
+      "name": "gonol-build",
+      "path": "gonol-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Fail-closed rubric for comparing, retaining, rejecting, deprecating, and selecting UCNS options within an explicit scope. Load this when an agent asks which UCNS candidate should win, whether evidence authorizes selection, how an option moves from registered or implemented to selected, how to compare competing gonol constructors, carriers, geometries, policies, projections, or measurement candidates, or how to issue a scoped UCNS decision receipt. Do not load merely to register options, execute one already-selected option, or choose ordinary UI preferences. Never select universal UCNS canon by score, familiarity, implementation order, or EDCM-local evidence.",
+      "digest": "c8f1f3bbbd68afb7c5575ae3706740623b934695239a19f1adad37dfdf958ee1",
+      "kind": "procedural",
+      "name": "ucns-option-selection",
+      "path": "ucns-option-selection/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Evidence-bound EPAC target selection and display for WebMCP handoffs and other human-facing surfaces. Load this when choosing an EPAC element, molecule, construction receipt, comparison result, or available visualization to present; when preparing a receipt-backed EPAC display packet; when exposing the EPAC workflow as a selectable WebMCP skill; or when a requested EPAC display would require missing or invented geometry so the request can be refused or downgraded to verified source-backed output. Do not load to select EPAC or a UCNS candidate as canon, or for unrelated WebMCP catalogue changes.",
+      "digest": "e90e73a88205e2ea0603a5d5009a7ca456269fc57ce16eca9de134340a7da13e",
+      "kind": "procedural",
+      "name": "epac-selection-display",
+      "path": "epac-selection-display/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Protocol and workflow for all tasks involving The Interdependency organization, its repositories, The Interdependent Way projects, EDCMBONE transcript analysis, code building, research, GitHub maintenance and updates. Load this whenever the task or context touches The-Interdependency assets, or on phrases like \"assemble edcmbone transcripts for analysis\", \"write code that...\", or any GitHub/research/build work on org projects.",
+      "digest": "d9016475e14bdecf112e5071d84836d94c53e62b93e8b61b4a3080715b789540",
+      "kind": "procedural",
+      "name": "the-interdependency",
+      "path": "the-interdependency/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Cross-repository coordination for The Interdependency. Load this when a task spans, consumes, compares, publishes to, or can change the contract between two or more repositories; when an agent is about to choose one repo as its workspace for a stack-level problem; when exact producer, evidence-source, skill, semantic, mathematical, or measurement identities must travel together; or when creating a shared stack manifest, multi-repo handoff, coordinated release, or cross-repo validation plan.",
+      "digest": "77712f15af833b69f800ee99ab7b9304017e7ead159a2c866a337dbb434fad1a",
+      "kind": "procedural",
+      "name": "interdependent-work-graph",
+      "path": "interdependent-work-graph/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Fail-closed update protocol for The-Interdependency/stack. Load this when a stack change adds, moves, extracts, graduates, renames, removes, or changes the authority, relation, source identity, or placement of a participant, research workspace, libs pin, BASE record, stack manifest entry, or architecture description; when stack-manifest.json, STACK_MANIFEST.md, README.md, or research BASE.json files may drift from one another; or when validating that a structural stack change is complete before commit or merge.",
+      "digest": "d01d6cac789d37121089128c2d6d6bbdebba8a3c3153136b5fe2f9432b8fde26",
+      "kind": "procedural",
+      "name": "stack-update",
+      "path": "stack-update/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Project incubation and graduation doctrine for emergent components born inside an integration, stack, laboratory, or incubator repository. Load this when several existing projects compose into a new candidate capability; when assessing whether that candidate should remain incubated or become its own repository/package; when extracting it with provenance; when establishing a new implementation authority boundary; when publishing the extracted project through a registry such as PyPI; or when making the former incubator consume the released artifact instead of its local copy. Do not load for an ordinary new repository with no incubation history or for a routine package release whose authority boundary is already established.",
+      "digest": "4eff100c8fb489ac720a6d5735abd3f95da7cf6cb368b8cb79dcf36c1f3940b4",
+      "kind": "procedural",
+      "name": "project-incubation-graduation",
+      "path": "project-incubation-graduation/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Provenance-bearing publication from distributed source owners. Load this when assembling, displaying, or maintaining one ordered textbook, report, standard, corpus, archive, knowledge surface, or public reading sequence whose authoritative units live in multiple repositories or independently owned files; when a publication consumer must retrieve exact commits, blobs, and content digests; when source order, source-local license or status, explicit fallback, correction routing, or public build identity must remain intact. Load interdependent-work-graph with it. Do not load for ordinary single-repository documentation, a link index that does not reproduce source content, or cross-repository code coordination with no publication artifact.",
+      "digest": "955c98cffe33ae35ccc2320cf25fd9a8388dcd0122ea2f53e4848a0fdbab0fee",
+      "kind": "procedural",
+      "name": "distributed-publication",
+      "path": "distributed-publication/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Load this when any modification to The-Interdependency/The-Interdependency.github.io is planned or underway, including source, content, configuration, tests, workflows, dependencies, generated-contract code, or deployment paths. Every website change transaction must append at least one By the builder entry recording date, time, and the exact runtime model; the model chooses the subject and writes no more than needed to explicate it. Do not load for read-only inspection that changes no website file.",
+      "digest": "3bf97cb0db20d042c8d9d4230bd92567353fccc6ee914570dbd0288ec9096a85",
+      "kind": "procedural",
+      "name": "website-builder-journal",
+      "path": "website-builder-journal/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Loop engineering for designing closed feedback cycles (Discover→Plan→Execute→Verify→Iterate), single-agent and fleet loops with subagent maker/checker separation, and automated verify-iterate workflows. Load this when building or orchestrating agent systems (a0p, AIMMH), EDCMBONE analysis pipelines, repeatable AI workflows, or any The-Interdependency project that benefits from structured loops instead of manual prompting. Cross-load with the-interdependency for org workflow context.",
+      "digest": "8e3ce202b3e7e6cbe778a1821efbe351a859bbb02e4fd54d6cd4af06c8459909",
+      "kind": "procedural",
+      "name": "loop-eng",
+      "path": "loop-eng/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Deterministic restoration of derived-artifact consistency after authoritative inputs change. Load this when deciding whether generated or derived outputs are current; when regenerating MSDMD collections, documentation, projections, package indexes, calibration artifacts, or other outputs from exact source identities; when computing the minimum affected rebuild closure; when designing retryable regeneration across unreliable executors; or when a system needs to make artifacts provably fresh rather than merely recently rebuilt. Do not load for ordinary one-shot builds whose inputs and outputs have no persistent freshness contract.",
+      "digest": "068020f16a9c8c8b4a016f91a4a0b8a7646f3553e3ce35dc3d9cf3c585429aad",
+      "kind": "procedural",
+      "name": "fresh-making",
+      "path": "fresh-making/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Action sizing and escalation doctrine. Load this when choosing between the smallest decisive experiment and a maximal coherent program; when asked for the highest-leverage action, minimal versus maximal action, what to do next under time, attention, money, compute, or coordination constraints; when deciding whether to run a bounded falsifier before a full build; or when a task risks scope sprawl. Do not load for a trivial fixed-scope task, immediate emergency containment, or ordinary prioritization that has no evidence or escalation decision.",
+      "digest": "69769086e7d25725f2cc78a5b84ebabb891176280887151aeafe213afeed9272",
+      "kind": "procedural",
+      "name": "action-calibration",
+      "path": "action-calibration/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Evidence-led repository audit and repair from exact repository identity through authoritative verification. Use this when asked to audit, assess, harden, clean up, or audit and repair an existing code repository; when a green build may conceal placeholder gates, deprecated paths, or partial publication; or when repair must distinguish repository defects from environment, external-service, policy, and unresolved conditions. Do not load for an ordinary fixed-scope edit, a narrow review, or diagnosis of one already-localized failure unless the user requests a broader repository audit.",
+      "digest": "22baa185df82b346898a0e25a35e31622a0f04aa8976960db81bcc8e70e2c4a0",
+      "kind": "procedural",
+      "name": "repo-audit-repair",
+      "path": "repo-audit-repair/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": "contract"
+    },
+    {
+      "description": "Skill authoring and skill compliance workflow for The Interdependency skill-lib. Load this when creating a new SKILL.md, revising an existing skill, bringing repo skills into a shared compliance shape, designing a skill-specific test suite, deciding whether a skill is metadata-block or procedural, or asking the question set required before a skill can be accepted.",
+      "digest": "ff9122dd5600e4fc59257c08dc8f915b7322a79822caaa6fc533b6320f03035f",
+      "kind": "procedural",
+      "name": "skill-build",
+      "path": "skill-build/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Record and report evidence-bearing usage maturity for skills installed from The Interdependency skill-lib. Load this when any other skill-lib skill is invoked, and when asked for skill counts, usage history, maturity, reliability, experimental status, field-test status, operational status, or daily-use status.",
+      "digest": "8c53c2d342c50ecf6ec546a7bc52d9cb86e152f3faaa67ed79ab4dfa144f6eda",
+      "kind": "procedural",
+      "name": "skill-usage",
+      "path": "skill-usage/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Fail-closed SSH automation and shell-script delivery for OpenSSH and Google Cloud. Load this when writing, reviewing, or troubleshooting non-interactive SSH scripts, CI/CD remote commands, scp/sftp/rsync-over-SSH workflows, Google Cloud IAP or OS Login automation, remote heredocs, host-key bootstrap, retries and timeouts, or one-box Cloud Shell commands that must not terminate the user's interactive shell. Do not load for one-off interactive login, server-side sshd hardening alone, or MCP-based VM control planes.",
+      "digest": "6a53b3ee0fe24e0ce621df147ed0cff861eaebaf2961417a45b716145cdfdd4c",
+      "kind": "procedural",
+      "name": "ssh-automation",
+      "path": "ssh-automation/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Private VM control-plane skill for giving an AI/MCP client SSH-like access to a Linux or Google Compute Engine VM without handing the client an SSH private key. Load this when a user asks to connect ChatGPT, an OpenAI client, Codex, Claude, or another MCP host to a VM; expose bounded shell/file tools on a private VM; replace repeated human SSH with an auditable MCP control plane; install or audit the shipped vm-mcp runtime; or add narrowly scoped administrative actions above the workspace shell. Do not load for ordinary human-only SSH setup with no MCP/agent access.",
+      "digest": "0e4ea78cd0a3eb1e4e8c361b692bcc8dbceec6dd8830db73081d5369f1740743",
+      "kind": "procedural",
+      "name": "vm-mcp",
+      "path": "vm-mcp/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "TypeScript frontend generation from backend-owned module metadata and living specs. Load this when building, reviewing, or refactoring a self-building UI that reads backend metadata, exposes every editable field per module, renders each module's living spec, generates TypeScript types/forms/routes from metadata, or keeps admin/editor frontends synchronized with msdmd-style source declarations.",
+      "digest": "c840e62320a637de31f7b3ab556e044f87fde2acf4909f7762e7beb96f7b1cfe",
+      "kind": "metadata-block",
+      "name": "typed-meta-frontend",
+      "path": "typed-meta-frontend/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Write correct, performant SQL across all major data warehouse dialects (Snowflake, BigQuery, Databricks, PostgreSQL, etc.). Use this when writing queries, optimizing slow SQL, translating between dialects, or building complex analytical queries with CTEs, window functions, or aggregations.",
+      "digest": "1d1364e391472eecd1164c76fc18dd1b77fd648b019c7d02039b73ba5d0af11b",
+      "kind": "procedural",
+      "name": "sql-queries",
+      "path": "sql-queries/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Apply statistical methods including descriptive stats, trend analysis, outlier detection, and hypothesis testing. Use this when analyzing distributions, testing for significance, detecting anomalies, computing correlations, or interpreting statistical results.",
+      "digest": "34291a96d86bae9bb25af1c31ac99f31ede3cf6664360822fd6c98587b4ab327",
+      "kind": "procedural",
+      "name": "statistical-analysis",
+      "path": "statistical-analysis/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Profile and explore a dataset to understand its shape, quality, and patterns. Use this when encountering a new table or file, checking null rates and column distributions, spotting data quality issues like duplicates or suspicious values, or deciding which dimensions and metrics to analyze.",
+      "digest": "3ee65813bf49b6ada0e0a9c1c1bfb4a46bc3bd39768c187ef6c3725c70c69e99",
+      "kind": "procedural",
+      "name": "explore-data",
+      "path": "explore-data/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "QA an analysis before sharing -- methodology, accuracy, and bias checks. Use this when reviewing an analysis before a stakeholder presentation, spot-checking calculations and aggregation logic, verifying a SQL query's results look right, or assessing whether conclusions are actually supported by the data.",
+      "digest": "3683e9d6ffeed2c093c65117f5259231cf24619b4a63d9d88f093f979e504c39",
+      "kind": "procedural",
+      "name": "validate-data",
+      "path": "validate-data/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    },
+    {
+      "description": "Create effective data visualizations with Python (matplotlib, seaborn, plotly). Use this when building charts, choosing the right chart type for a dataset, creating publication-quality figures, or applying design principles like accessibility and color theory.",
+      "digest": "f70aa47d83a244893a8f4a93c1c9cf71ca0be6f99715b8c2a37d0d99386a751a",
+      "kind": "procedural",
+      "name": "data-visualization",
+      "path": "data-visualization/SKILL.md",
+      "source_commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
+      "status": null
+    }
+  ],
+  "skills_json_digest": "b9c56b9edc2489da744774aa006afeff257fa3b6f50ee53a8fb5e5d884d607d0",
+  "version": 1
+}
