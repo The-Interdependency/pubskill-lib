@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -95,6 +96,15 @@ class MetapatAdapterTests(unittest.TestCase):
             self.assertFalse(metapat_adapter.is_metapat_enabled())
             with self.assertRaises(metapat_adapter.MetapatUnavailable):
                 metapat_adapter.classify_recurrence(self._evidence())
+
+    def test_preloaded_metapat_module_outside_checkout_fails_closed(self):
+        import types
+        fake = types.ModuleType("metapat.catalog")
+        fake.__file__ = "/tmp/elsewhere/metapat/catalog.py"
+        with mock.patch.dict(os.environ, self.pin_env):
+            with mock.patch.dict(sys.modules, {"metapat.catalog": fake}):
+                with self.assertRaises(metapat_adapter.MetapatUnavailable):
+                    metapat_adapter.classify_recurrence(self._evidence())
 
     def test_dirty_checkout_fails_closed(self):
         marker = self.pin_root / "uncommitted-review-edit.txt"

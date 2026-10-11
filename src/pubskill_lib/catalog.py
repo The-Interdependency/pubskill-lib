@@ -89,6 +89,8 @@ def _resource_map(skill_dir: Path) -> dict[str, Path]:
             continue
         if any(part == "__pycache__" for part in path.parts):
             continue
+        if any(part == "node_modules" for part in path.parts):
+            continue
         if path.suffix == ".pyc":
             continue
         resources[path.relative_to(skill_dir).as_posix()] = path

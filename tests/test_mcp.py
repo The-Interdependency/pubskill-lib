@@ -168,6 +168,21 @@ class McpHttpBytesTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(data)["error"]["code"], -32600)
 
+    def test_content_type_must_be_application_json(self):
+        status, _, _ = mcp_server.handle_http_bytes(
+            b"{}", self.ACCEPT, content_type_header="text/plain"
+        )
+        self.assertEqual(status, 415)
+        payload = json.dumps(rpc(1, "initialize", {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "0"},
+        })).encode()
+        status, _, _ = mcp_server.handle_http_bytes(
+            payload, self.ACCEPT, content_type_header="application/json; charset=utf-8"
+        )
+        self.assertEqual(status, 200)
+
     def test_parse_error_returns_400(self):
         status, content_type, data = mcp_server.handle_http_bytes(
             b"not-json", self.ACCEPT

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,6 +29,8 @@ from pubskill_lib.collections import CollectionError, CollectionTimeoutError
 from pubskill_lib.metapat_adapter import MetapatUnavailable
 
 MAX_REQUEST_BYTES = 1024 * 1024
+MCP_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+BODY_READ_TIMEOUT_SECONDS = 10
 
 _INSPECT_FIELDS = {"repo_url"}
 _COLLECT_FIELDS = {"repo_url", "revision", "require_sources", "require_facts"}
@@ -93,10 +96,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def request_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", 0))
-        if length <= 0 or length > MAX_REQUEST_BYTES:
-            raise ValueError("invalid request")
-        body = json.loads(self.rfile.read(length))
+        body = json.loads(self.raw_body)
         if not isinstance(body, dict):
             raise ValueError("request body must be a JSON object")
         return body
@@ -138,6 +138,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, {"error": str(exc) or "invalid request"})
 
     def do_POST(self) -> None:
+        parsed = urlsplit(self.path)
+        path = parsed.path
+        limit = MCP_MAX_REQUEST_BYTES if path == "/mcp" else MAX_REQUEST_BYTES
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length <= 0 or length > limit:
+            return self.reply(400, {"error": "invalid request body"})
+        # Read the bounded body before occupying a worker slot, with a
+        # deadline, so a slow client can never pin the semaphore by stalling.
+        try:
+            self.request.settimeout(BODY_READ_TIMEOUT_SECONDS)
+            self.raw_body = self.rfile.read(length)
+        except (socket.timeout, TimeoutError, OSError):
+            return self.reply(408, {"error": "request body timed out"})
+        finally:
+            self.request.settimeout(None)
         if not WORKER_SEMAPHORE.acquire(blocking=False):
             return self.reply(429, {"error": "too many concurrent operations"})
         try:
@@ -164,14 +179,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(500, {"error": "inspection failed"})
 
         if path == "/mcp":
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            if length <= 0 or length > 4 * 1024 * 1024:
-                return self.reply(400, {"error": "invalid request body"})
             status, content_type, data = mcp_server.handle_http_bytes(
-                self.rfile.read(length),
+                self.raw_body,
                 self.headers.get("Accept", ""),
                 self.headers.get("Origin"),
                 self.headers.get("MCP-Protocol-Version"),
+                self.headers.get("Content-Type", ""),
             )
             self.send_response(status)
             self.send_header("Content-Type", content_type)

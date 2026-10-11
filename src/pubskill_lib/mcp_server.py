@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 import threading
 from typing import Any
@@ -381,12 +382,17 @@ def handle_http_bytes(
     accept_header: str = "",
     origin_header: str | None = None,
     protocol_version_header: str | None = None,
+    content_type_header: str = "application/json",
 ) -> tuple[int, str, bytes]:
     """Handle one MCP Streamable HTTP request body.
 
     Returns (status, content_type, response_body). The transport is stateless;
     the server assigns no session id.
     """
+    media_type = content_type_header.split(";")[0].strip().lower()
+    if media_type != "application/json":
+        error = _jsonrpc_error(None, JSONRPC_INVALID_REQUEST, "Content-Type must be application/json")
+        return 415, "application/json", json.dumps(error).encode()
     if not _origin_allowed(origin_header):
         return 403, "application/json", b'{"error":"Origin is not allowed"}'
     if protocol_version_header and protocol_version_header not in SUPPORTED_PROTOCOL_VERSIONS:
@@ -434,8 +440,9 @@ class McpHandler:
             environ.get("HTTP_ACCEPT", ""),
             environ.get("HTTP_ORIGIN"),
             environ.get("HTTP_MCP_PROTOCOL_VERSION"),
+            environ.get("CONTENT_TYPE", "application/json"),
         )
-        reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 403: "Forbidden", 406: "Not Acceptable"}.get(status, "OK")
+        reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 403: "Forbidden", 406: "Not Acceptable", 415: "Unsupported Media Type"}.get(status, "OK")
         start_response(f"{status} {reason}", [("Content-Type", content_type), ("Cache-Control", "no-store")])
         return [data]
 
@@ -488,7 +495,35 @@ def main(argv: list[str] | None = None) -> int:
     port = int(__import__("os").environ.get("PORT", "8080"))
 
     class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(405)
+            self.send_header("Allow", "POST")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if length <= 0 or length > 4 * 1024 * 1024:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error":"invalid request body"}')
+                return
+            # Read the bounded body before occupying a worker slot, with a
+            # deadline, so a slow client can never pin the semaphore.
+            try:
+                self.request.settimeout(10)
+                body = self.rfile.read(length)
+            except (socket.timeout, TimeoutError, OSError):
+                self.send_response(408)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+                return
+            finally:
+                self.request.settimeout(None)
             if not self.server.worker_semaphore.acquire(blocking=False):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
@@ -497,23 +532,17 @@ def main(argv: list[str] | None = None) -> int:
                 self.wfile.write(b"{}")
                 return
             try:
-                self._handle_post()
+                self._handle_post(body)
             finally:
                 self.server.worker_semaphore.release()
 
-        def _handle_post(self) -> None:
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            if length <= 0 or length > 4 * 1024 * 1024:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(b'{"error":"invalid request body"}')
-                return
+        def _handle_post(self, body: bytes) -> None:
             status, content_type, data = handle_http_bytes(
-                self.rfile.read(length),
+                body,
                 self.headers.get("Accept", ""),
                 self.headers.get("Origin"),
                 self.headers.get("MCP-Protocol-Version"),
+                self.headers.get("Content-Type", ""),
             )
             self.send_response(status)
             self.send_header("Content-Type", content_type)

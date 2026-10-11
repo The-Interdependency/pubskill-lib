@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from .acquisition import GIT_ISOLATED_ENV
 from .identity import skills_root
 
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -90,6 +92,21 @@ def _resolve_git_commit(root: Path) -> str:
         return "hmmm"
 
 
+def _kill_process_group(process: subprocess.Popen) -> None:
+    """Terminate and reap the collector's whole process group."""
+    if os.name == "posix":
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            process.kill()
+    else:
+        process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def _run_collector_capped(
     command: list[str],
     *,
@@ -101,15 +118,21 @@ def _run_collector_capped(
 
     stdout and stderr are spooled to temporary files, and a monitor thread
     terminates the collector as soon as the declared output cap is crossed, so
-    a metadata-rich repository cannot force unbounded response buffering.
+    a metadata-rich repository cannot force unbounded response buffering. The
+    collector runs in its own process group and is reaped as a group so
+    reader helper processes cannot outlive the request.
     """
     max_bytes = max(1, max_output_chars)  # UTF-8 bytes are >= chars; byte cap is conservative
+    popen_kwargs = {}
+    if os.name == "posix":
+        popen_kwargs["start_new_session"] = True
     with tempfile.TemporaryFile() as out_file, tempfile.TemporaryFile() as err_file:
         process = subprocess.Popen(
             command,
             stdout=out_file,
             stderr=err_file,
             env=env,
+            **popen_kwargs,
         )
         exceeded: list[bool] = []
 
@@ -117,7 +140,7 @@ def _run_collector_capped(
             while process.poll() is None:
                 if out_file.tell() > max_bytes:
                     exceeded.append(True)
-                    process.kill()
+                    _kill_process_group(process)
                     return
                 time.sleep(0.1)
 
@@ -126,8 +149,7 @@ def _run_collector_capped(
         try:
             process.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired as error:
-            process.kill()
-            process.wait()
+            _kill_process_group(process)
             raise CollectionTimeoutError(f"collection timed out after {timeout_seconds}s") from error
         finally:
             thread.join(timeout=1)
@@ -169,7 +191,7 @@ def collect_metadata(
     if not (skills / "msdmd" / "collect.py").is_file():
         raise RuntimeError(f"canonical msdmd collector missing under {skills}")
 
-    env = dict(os.environ)
+    env = dict(os.environ, **GIT_ISOLATED_ENV)
     pythonpath = str(skills)
     if env.get("PYTHONPATH"):
         pythonpath += os.pathsep + env["PYTHONPATH"]

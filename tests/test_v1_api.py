@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -157,6 +158,35 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             api.v1_get_resource("doctrine", "../skills.json")
 
+    def test_resource_listing_excludes_installed_reader_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root / "skills"
+            skill_dir = skills / "sym-skill"
+            (skill_dir / "node_modules" / "typescript" / "lib").mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("---\nname: sym-skill\ndescription: test\n---\n", encoding="utf-8")
+            (skill_dir / "real.txt").write_text("real", encoding="utf-8")
+            (skill_dir / "node_modules" / "typescript" / "lib" / "typescript.js").write_text("// tsc", encoding="utf-8")
+            catalog_manifest = {
+                "schema": "pubskill-lib.catalog",
+                "version": 1,
+                "producer": {"repository": "The-Interdependency/skill-lib", "commit": "0" * 40},
+                "skill_count": 1,
+                "propagated_set_digest": "0" * 64,
+                "skills": [{
+                    "name": "sym-skill",
+                    "path": "sym-skill/SKILL.md",
+                    "digest": "0" * 64,
+                    "source_commit": "0" * 40,
+                }],
+            }
+            (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+                skill = api.v1_get_skill("sym-skill")["skill"]
+                paths = {item["path"] for item in skill["resources"]}
+                self.assertIn("real.txt", paths)
+                self.assertNotIn("node_modules/typescript/lib/typescript.js", paths)
+
     def test_resolve_returns_scored_candidates_not_authority(self):
         resolved = api.v1_resolve("metadata collection")
         self.assertEqual(resolved["method"], "keyword-overlap-v1")
@@ -196,6 +226,57 @@ class CollectionTests(unittest.TestCase):
             self.assertEqual(result.collection["repo"], "fixture/repo")
             self.assertTrue(result.collection["facts"])
             self.assertEqual(result.returncode, 0)
+
+    def test_collection_uses_isolated_git_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            _make_git_fixture(root)
+            captured = {}
+
+            def fake_run(command, *, env, timeout_seconds, max_output_chars):
+                captured.update(env)
+                return 0, json.dumps({
+                    "schema": "the-interdependency.msdmd-collection",
+                    "schema_version": "2.0.0",
+                    "repo": "fixture/repo",
+                }), ""
+
+            with mock.patch.object(collections, "_run_collector_capped", side_effect=fake_run):
+                collections.collect_metadata(root, "fixture/repo", strict=False)
+            self.assertEqual(captured["GIT_CONFIG_NOSYSTEM"], "1")
+            self.assertEqual(captured["GIT_CONFIG_GLOBAL"], os.devnull)
+
+    def test_collector_timeout_kills_process_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            pidfile = base / "grandchild.pid"
+            script = base / "spawner.py"
+            script.write_text(
+                "import pathlib, subprocess, sys\n"
+                "pidfile = pathlib.Path(sys.argv[1])\n"
+                "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+                "pidfile.write_text(str(child.pid))\n"
+                "child.wait()\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(collections.CollectionTimeoutError):
+                collections._run_collector_capped(
+                    [sys.executable, str(script), str(pidfile)],
+                    env=dict(os.environ),
+                    timeout_seconds=1,
+                    max_output_chars=100000,
+                )
+            pid = int(pidfile.read_text())
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.1)
+            else:
+                self.fail(f"grandchild process {pid} survived collector timeout")
 
     def test_collection_never_executes_target_code(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -312,6 +393,15 @@ class AcquisitionBoundaryTests(unittest.TestCase):
         self.assertIn("core.attributesFile=/dev/null", safe_config)
         self.assertEqual(acquisition._GIT_ISOLATED_ENV["GIT_CONFIG_NOSYSTEM"], "1")
         self.assertEqual(acquisition._GIT_ISOLATED_ENV["GIT_CONFIG_GLOBAL"], os.devnull)
+
+    def test_repo_size_counts_symlinks_toward_file_cap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            (base / "real.txt").write_text("x", encoding="utf-8")
+            (base / "link.txt").symlink_to(base / "real.txt")
+            size, count = acquisition._repo_size_bytes(base)
+            self.assertEqual(count, 2)
+            self.assertEqual(size, 1)
 
     def test_monitor_kills_acquisition_when_caps_crossed(self):
         with tempfile.TemporaryDirectory() as directory:

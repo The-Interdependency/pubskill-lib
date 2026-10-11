@@ -119,6 +119,15 @@ def _import_metapat():
     package_src = str(root / "src")
     if package_src not in sys.path:
         sys.path.insert(0, package_src)
+    root_resolved = root.resolve()
+    for module_name in ("metapat.catalog", "metapat.structural_recurrence"):
+        loaded = sys.modules.get(module_name)
+        if loaded is not None:
+            module_file = getattr(loaded, "__file__", None)
+            if not module_file or root_resolved not in Path(module_file).resolve().parents:
+                raise MetapatUnavailable(
+                    f"preloaded {module_name} does not resolve inside the pinned METAPAT checkout"
+                )
     from metapat.catalog import CATALOG_VERSION, canonical_semantic_catalog
     from metapat.structural_recurrence import RecurrenceEvidence, adjudicate_recurrence
 

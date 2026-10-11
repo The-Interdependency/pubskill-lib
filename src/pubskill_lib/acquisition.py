@@ -64,12 +64,13 @@ _GIT_SAFE_CONFIG = [
 # Ambient system/global git configuration is not loaded: target repositories
 # must never select a host filter driver (or any other ambient command) that
 # git would execute during checkout.
-_GIT_ISOLATED_ENV = {
+GIT_ISOLATED_ENV = {
     "GIT_TERMINAL_PROMPT": "0",
     "GIT_CONFIG_NOSYSTEM": "1",
     "GIT_CONFIG_SYSTEM": os.devnull,
     "GIT_CONFIG_GLOBAL": os.devnull,
 }
+_GIT_ISOLATED_ENV = GIT_ISOLATED_ENV
 
 
 def _git_environment(home: Path) -> dict[str, str]:
@@ -151,6 +152,7 @@ def _repo_size_bytes(root: Path) -> tuple[int, int]:
     count = 0
     for path in root.rglob("*"):
         if path.is_symlink():
+            count += 1
             continue
         if path.is_file():
             count += 1
