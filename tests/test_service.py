@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -97,6 +100,64 @@ class ServiceBoundaryTests(unittest.TestCase):
             service._validated_requirements(["x" * 257], "require_sources")
         with self.assertRaises(ValueError):
             service._validated_requirements([1], "require_facts")
+
+    def test_query_limits_are_validated_before_conversion(self) -> None:
+        self.assertEqual(service.api.validate_limit(None, 200, 1000), 200)
+        self.assertEqual(service.api.validate_limit(5, 200, 1000), 5)
+        for bad in ({}, True, 0, 1001, "5"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    service.api.validate_limit(bad, 200, 1000)
+
+    def test_max_workers_reads_environment(self) -> None:
+        with patch.dict("os.environ", {"PUBSKILL_MAX_WORKERS": "2"}):
+            self.assertEqual(service.max_workers(), 2)
+
+    def test_concurrent_requests_are_bounded(self) -> None:
+        import http.client
+
+        entered = threading.Event()
+
+        def slow_run(*args, **kwargs):
+            entered.set()
+            time.sleep(0.5)
+            return {"findings": [], "hmmm": [], "target": {}}
+
+        with patch.object(service, "WORKER_SEMAPHORE", threading.BoundedSemaphore(1)):
+            with patch.object(service, "run_inspection", side_effect=slow_run):
+                server = service.ThreadingHTTPServer(("127.0.0.1", 0), service.Handler)
+                server.daemon_threads = True
+                port = server.server_address[1]
+
+                def serve() -> None:
+                    server.handle_request()
+                    server.handle_request()
+
+                thread = threading.Thread(target=serve, daemon=True)
+                thread.start()
+
+                def post() -> int:
+                    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                    connection.request(
+                        "POST",
+                        "/inspect",
+                        body=json.dumps({"repo_url": "https://github.com/owner/repo"}),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    response = connection.getresponse()
+                    status = response.status
+                    response.read()
+                    connection.close()
+                    return status
+
+                first = threading.Thread(target=post)
+                first.start()
+                self.assertTrue(entered.wait(timeout=5))
+                second_status = post()
+                first.join(timeout=5)
+                thread.join(timeout=5)
+                server.server_close()
+                self.assertEqual(second_status, 429)
 
 
 if __name__ == "__main__":

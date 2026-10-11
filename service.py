@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -27,8 +28,6 @@ from pubskill_lib.collections import CollectionError, CollectionTimeoutError
 from pubskill_lib.metapat_adapter import MetapatUnavailable
 
 MAX_REQUEST_BYTES = 1024 * 1024
-MAX_REQUIREMENTS = 20
-MAX_REQUIREMENT_LENGTH = 256
 
 _INSPECT_FIELDS = {"repo_url"}
 _COLLECT_FIELDS = {"repo_url", "revision", "require_sources", "require_facts"}
@@ -64,16 +63,14 @@ def run_inspection(repo_url: str) -> dict:
 
 
 def _validated_requirements(value: object, name: str) -> tuple[str, ...]:
-    """Cap, deduplicate and validate collection requirement arrays."""
-    if value is None:
-        return ()
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
-        raise ValueError(f"{name} must be an array of non-empty strings")
-    if len(value) > MAX_REQUIREMENTS:
-        raise ValueError(f"{name} supports at most {MAX_REQUIREMENTS} entries")
-    if any(len(item) > MAX_REQUIREMENT_LENGTH for item in value):
-        raise ValueError(f"{name} entries must be at most {MAX_REQUIREMENT_LENGTH} characters")
-    return tuple(dict.fromkeys(value))
+    return api.validate_requirement_arrays(value, name)
+
+
+def max_workers() -> int:
+    return int(os.environ.get("PUBSKILL_MAX_WORKERS", "4"))
+
+
+WORKER_SEMAPHORE = threading.BoundedSemaphore(max_workers())
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -141,6 +138,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, {"error": str(exc) or "invalid request"})
 
     def do_POST(self) -> None:
+        if not WORKER_SEMAPHORE.acquire(blocking=False):
+            return self.reply(429, {"error": "too many concurrent operations"})
+        try:
+            self._handle_post()
+        finally:
+            WORKER_SEMAPHORE.release()
+
+    def _handle_post(self) -> None:
         parsed = urlsplit(self.path)
         path = parsed.path
 
@@ -193,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
                     200,
                     api.v1_resolve(
                         body["query"],
-                        limit=body.get("limit"),
+                        limit=api.validate_limit(body.get("limit"), 10, 50),
                     ),
                 )
             if path == "/v1/msdmd/collect":
@@ -222,7 +227,7 @@ class Handler(BaseHTTPRequestHandler):
                         path_glob=body.get("path_glob"),
                         diagnostic_status=body.get("diagnostic_status"),
                         diagnostics_only=bool(body.get("diagnostics_only", False)),
-                        limit=int(body.get("limit", 200)),
+                        limit=api.validate_limit(body.get("limit"), 200, 1000),
                     ),
                 )
             if path == "/v1/metapat/recurrence":

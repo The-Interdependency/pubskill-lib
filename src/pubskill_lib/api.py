@@ -13,6 +13,10 @@ from .acquisition import acquire_repository, receipt_header
 from .identity import response_envelope
 
 
+MAX_REQUIREMENTS = 20
+MAX_REQUIREMENT_LENGTH = 256
+
+
 def reject_unknown_fields(data: object, allowed: set[str], name: str) -> dict:
     """Reject request objects that carry fields outside the declared surface."""
     if not isinstance(data, dict):
@@ -21,6 +25,28 @@ def reject_unknown_fields(data: object, allowed: set[str], name: str) -> dict:
     if unknown:
         raise ValueError(f"unknown fields in {name}: {', '.join(unknown)}")
     return data
+
+
+def validate_requirement_arrays(value: object, name: str) -> tuple[str, ...]:
+    """Cap, deduplicate and validate collection requirement arrays."""
+    if value is None:
+        return ()
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise ValueError(f"{name} must be an array of non-empty strings")
+    if len(value) > MAX_REQUIREMENTS:
+        raise ValueError(f"{name} supports at most {MAX_REQUIREMENTS} entries")
+    if any(len(item) > MAX_REQUIREMENT_LENGTH for item in value):
+        raise ValueError(f"{name} entries must be at most {MAX_REQUIREMENT_LENGTH} characters")
+    return tuple(dict.fromkeys(value))
+
+
+def validate_limit(value: object, default: int, maximum: int) -> int:
+    """Validate an integer limit, rejecting booleans and out-of-range values."""
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+        raise ValueError(f"limit must be an integer between 1 and {maximum}")
+    return value
 
 
 def _is_valid_collection(collection: object) -> bool:

@@ -48,6 +48,8 @@ _GIT_SAFE_CONFIG = [
     "-c",
     "core.hooksPath=/dev/null",
     "-c",
+    "core.attributesFile=/dev/null",
+    "-c",
     "filter.lfs.smudge=",
     "-c",
     "filter.lfs.required=false",
@@ -58,6 +60,15 @@ _GIT_SAFE_CONFIG = [
     "-c",
     "http.followRedirects=false",
 ]
+
+# Ambient system/global git configuration is not loaded: target repositories
+# must never select a host filter driver (or any other ambient command) that
+# git would execute during checkout.
+_GIT_ISOLATED_ENV = {
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": os.devnull,
+}
 
 
 class AcquisitionError(RuntimeError):
@@ -198,7 +209,7 @@ def acquire_repository(
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="pubskill-acquire-") as tempdir:
         target = Path(tempdir) / "repo"
-        env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+        env = dict(os.environ, **_GIT_ISOLATED_ENV)
         checkout_timeout = {
             **effective_limits,
             "fetch_timeout_seconds": effective_limits["checkout_timeout_seconds"],

@@ -111,6 +111,19 @@ class McpJsonRpcTests(unittest.TestCase):
         self.assertTrue(response["result"]["isError"])
         self.assertIn("supported public HTTPS Git repository required", response["result"]["content"][0]["text"])
 
+    def test_tools_call_collect_caps_requirement_arrays(self):
+        response = mcp_server.handle_jsonrpc(
+            rpc(9, "tools/call", {
+                "name": "pubskill_collect_metadata",
+                "arguments": {
+                    "repo_url": "https://github.com/owner/repo",
+                    "require_sources": [str(i) for i in range(21)],
+                },
+            })
+        )
+        self.assertTrue(response["result"]["isError"])
+        self.assertIn("at most 20", response["result"]["content"][0]["text"])
+
     def test_tools_call_unknown_tool_returns_error_result(self):
         response = mcp_server.handle_jsonrpc(
             rpc(9, "tools/call", {"name": "not-a-tool", "arguments": {}})

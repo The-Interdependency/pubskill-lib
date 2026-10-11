@@ -46,7 +46,10 @@ def rpc(url: str, request_id: int, method: str, params: dict | None = None) -> d
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=180) as response:
+    # A permitted collection may spend up to 120s fetching, 60s checking out,
+    # and 180s collecting before the server's own limits fire; the client
+    # deadline must outlive that combined bound.
+    with urllib.request.urlopen(request, timeout=420) as response:
         body = response.read().decode("utf-8")
         return json.loads(body) if body.strip() else {}
 

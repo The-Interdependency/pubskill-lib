@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -71,8 +72,8 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "repo_url": {"type": "string", "minLength": 1},
                 "revision": {"type": "string"},
-                "require_sources": {"type": "array", "items": {"type": "string"}},
-                "require_facts": {"type": "array", "items": {"type": "string"}},
+                "require_sources": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 256}},
+                "require_facts": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 256}},
             },
             "required": ["repo_url"],
             "additionalProperties": False,
@@ -279,8 +280,8 @@ def call_tool(name: str, arguments: dict) -> dict:
         result = api.v1_collect(
             arguments["repo_url"],
             revision=arguments.get("revision"),
-            require_sources=tuple(arguments.get("require_sources") or ()),
-            require_facts=tuple(arguments.get("require_facts") or ()),
+            require_sources=api.validate_requirement_arrays(arguments.get("require_sources"), "require_sources"),
+            require_facts=api.validate_requirement_arrays(arguments.get("require_facts"), "require_facts"),
         )
     elif name == "pubskill_query_metadata":
         result = api.v1_query(
@@ -488,6 +489,19 @@ def main(argv: list[str] | None = None) -> int:
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802
+            if not self.server.worker_semaphore.acquire(blocking=False):
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+                return
+            try:
+                self._handle_post()
+            finally:
+                self.server.worker_semaphore.release()
+
+        def _handle_post(self) -> None:
             length = int(self.headers.get("Content-Length", 0) or 0)
             if length <= 0 or length > 4 * 1024 * 1024:
                 self.send_response(400)
@@ -511,7 +525,14 @@ def main(argv: list[str] | None = None) -> int:
         def log_message(self, format, *args):  # noqa: A002
             return
 
-    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+    class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+        def __init__(self, address, handler):
+            super().__init__(address, handler)
+            self.worker_semaphore = threading.BoundedSemaphore(
+                int(__import__("os").environ.get("PUBSKILL_MAX_WORKERS", "4"))
+            )
+
+    BoundedThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
     return 0
 
 

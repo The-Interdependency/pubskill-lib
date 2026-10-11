@@ -149,6 +149,14 @@ class CatalogTests(unittest.TestCase):
                 self.assertIn("real.txt", paths)
                 self.assertNotIn("__pycache__/generated.pyc", paths)
 
+    def test_doctrine_resources_are_retrievable(self):
+        resource = api.v1_get_resource("doctrine", "msdmd-checks.md")["resource"]
+        self.assertEqual(resource["name"], "doctrine")
+        self.assertEqual(resource["path"], "msdmd-checks.md")
+        self.assertRegex(resource["digest"], r"^[0-9a-f]{64}$")
+        with self.assertRaises(ValueError):
+            api.v1_get_resource("doctrine", "../skills.json")
+
     def test_resolve_returns_scored_candidates_not_authority(self):
         resolved = api.v1_resolve("metadata collection")
         self.assertEqual(resolved["method"], "keyword-overlap-v1")
@@ -298,6 +306,12 @@ class AcquisitionBoundaryTests(unittest.TestCase):
         with self.assertRaises(AcquisitionError):
             with acquire_repository("https://github.com/owner/../repo"):
                 pass
+
+    def test_git_config_isolated_from_ambient_filters(self):
+        safe_config = acquisition._GIT_SAFE_CONFIG
+        self.assertIn("core.attributesFile=/dev/null", safe_config)
+        self.assertEqual(acquisition._GIT_ISOLATED_ENV["GIT_CONFIG_NOSYSTEM"], "1")
+        self.assertEqual(acquisition._GIT_ISOLATED_ENV["GIT_CONFIG_GLOBAL"], os.devnull)
 
     def test_monitor_kills_acquisition_when_caps_crossed(self):
         with tempfile.TemporaryDirectory() as directory:

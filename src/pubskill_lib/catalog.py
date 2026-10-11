@@ -123,20 +123,18 @@ def get_skill(name: str) -> dict:
 
 
 def get_resource(name: str, relative: str) -> dict:
-    """Return one non-SKILL.md resource inside a skill directory."""
+    """Return one non-SKILL.md resource inside a skill directory.
+
+    Shared ``doctrine`` documents (referenced from canonical skills via
+    ``../doctrine/...``) are also served under the reserved catalog name
+    ``doctrine``, resolved against the pinned skills root.
+    """
+    if name == "doctrine":
+        return _get_doctrine_resource(relative)
     entry = _skill_entry(name)
     if entry is None:
         raise KeyError(name)
-    if (
-        not isinstance(relative, str)
-        or not relative
-        or "\x00" in relative
-        or "\\" in relative
-        or relative.startswith("/")
-        or not _RESOURCE_PATH_RE.fullmatch(relative)
-    ):
-        raise ValueError("invalid resource path")
-    if any(part in ("", ".", "..") for part in relative.split("/")):
+    if not _valid_resource_path(relative):
         raise ValueError("invalid resource path")
     resources = _resource_map(_skill_dir_from_entry(entry))
     if relative not in resources:
@@ -145,6 +143,36 @@ def get_resource(name: str, relative: str) -> dict:
     data = path.read_bytes()
     return {
         "name": name,
+        "path": relative,
+        "digest": hashlib.sha256(data).hexdigest(),
+        "content_utf8": data.decode("utf-8", errors="strict"),
+    }
+
+
+def _valid_resource_path(relative: object) -> bool:
+    if not isinstance(relative, str) or not relative:
+        return False
+    if "\x00" in relative or "\\" in relative or relative.startswith("/"):
+        return False
+    if not _RESOURCE_PATH_RE.fullmatch(relative):
+        return False
+    return not any(part in ("", ".", "..") for part in relative.split("/"))
+
+
+def _get_doctrine_resource(relative: str) -> dict:
+    if not _valid_resource_path(relative):
+        raise ValueError("invalid resource path")
+    doctrine_root = skills_root() / "doctrine"
+    if not doctrine_root.is_dir():
+        raise KeyError(relative)
+    path = (doctrine_root / relative).resolve()
+    if path.parent != doctrine_root.resolve() and doctrine_root.resolve() not in path.parents:
+        raise ValueError("resource path escapes the doctrine directory")
+    if not path.is_file() or path.is_symlink():
+        raise KeyError(relative)
+    data = path.read_bytes()
+    return {
+        "name": "doctrine",
         "path": relative,
         "digest": hashlib.sha256(data).hexdigest(),
         "content_utf8": data.decode("utf-8", errors="strict"),
