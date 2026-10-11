@@ -159,17 +159,28 @@ def _valid_resource_path(relative: object) -> bool:
     return not any(part in ("", ".", "..") for part in relative.split("/"))
 
 
+def _doctrine_resource_map() -> dict[str, Path]:
+    """Trusted mapping of shared doctrine documents to filesystem paths."""
+    resources: dict[str, Path] = {}
+    doctrine_root = skills_root() / "doctrine"
+    if not doctrine_root.is_dir():
+        return resources
+    for path in doctrine_root.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        if any(part == "__pycache__" for part in path.parts) or path.suffix == ".pyc":
+            continue
+        resources[path.relative_to(doctrine_root).as_posix()] = path
+    return resources
+
+
 def _get_doctrine_resource(relative: str) -> dict:
     if not _valid_resource_path(relative):
         raise ValueError("invalid resource path")
-    doctrine_root = skills_root() / "doctrine"
-    if not doctrine_root.is_dir():
+    resources = _doctrine_resource_map()
+    if relative not in resources:
         raise KeyError(relative)
-    path = (doctrine_root / relative).resolve()
-    if path.parent != doctrine_root.resolve() and doctrine_root.resolve() not in path.parents:
-        raise ValueError("resource path escapes the doctrine directory")
-    if not path.is_file() or path.is_symlink():
-        raise KeyError(relative)
+    path = resources[relative]
     data = path.read_bytes()
     return {
         "name": "doctrine",
