@@ -6,7 +6,12 @@ COPY . .
 # TypeScript reader runtime installed by npm ci lands in the same tree the
 # packaged worker loads from.
 ENV PUBSKILL_SKILLS_ROOT=/app/.agents/skills
+ARG PUBSKILL_CONSUMER_COMMIT=
+ENV PUBSKILL_CONSUMER_COMMIT=$PUBSKILL_CONSUMER_COMMIT
 RUN pip install --no-cache-dir . && pip install --no-cache-dir -r .agents/skills/msdmd/requirements.txt
+# Fail the image build unless the installed package reports a concrete
+# consumer source commit (passed via --build-arg or resolved from .git).
+RUN python -c "import re; from pubskill_lib.identity import consumer_commit; assert re.fullmatch(r'[0-9a-f]{40}', consumer_commit()), consumer_commit()"
 RUN npm ci --ignore-scripts --prefix .agents/skills/msdmd
 # The committed normalized fixture is the minimal-runtime receipt; the
 # deployed image installs the full reader runtime, so it replays the separate

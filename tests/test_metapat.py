@@ -106,6 +106,15 @@ class MetapatAdapterTests(unittest.TestCase):
                 with self.assertRaises(metapat_adapter.MetapatUnavailable):
                     metapat_adapter.classify_recurrence(self._evidence())
 
+    def test_preloaded_parent_metapat_package_fails_closed(self):
+        import types
+        fake_parent = types.ModuleType("metapat")
+        fake_parent.__path__ = ["/tmp/elsewhere/metapat"]
+        with mock.patch.dict(os.environ, self.pin_env):
+            with mock.patch.dict(sys.modules, {"metapat": fake_parent}):
+                with self.assertRaises(metapat_adapter.MetapatUnavailable):
+                    metapat_adapter.classify_recurrence(self._evidence())
+
     def test_dirty_checkout_fails_closed(self):
         marker = self.pin_root / "uncommitted-review-edit.txt"
         marker.write_text("dirty", encoding="utf-8")

@@ -22,7 +22,7 @@ from pathlib import Path
 
 from .acquisition import GIT_ISOLATED_ENV
 from .identity import skills_root
-from .reaper import reap_children
+from .reaper import reap_process_group
 
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
 DEFAULT_COLLECT_TIMEOUT_SECONDS = 180
@@ -67,6 +67,12 @@ def runtime_status() -> dict:
         candidate = skills_root() / "msdmd" / "node_modules" / "typescript" / "bin" / "tsc"
         tsc = str(candidate) if candidate.is_file() else None
 
+    missing = [name for name, present in python_runtimes.items() if not present]
+    if not node:
+        missing.append("node")
+    elif tsc is None:
+        missing.append("typescript_tsc")
+
     return {
         "python_runtimes": python_runtimes,
         "node": node,
@@ -75,7 +81,7 @@ def runtime_status() -> dict:
             "python": sorted(python_runtimes),
             "node_typescript": "msdmd/package.json",
         },
-        "missing": [name for name, present in python_runtimes.items() if not present],
+        "missing": missing,
     }
 
 
@@ -95,10 +101,13 @@ def _resolve_git_commit(root: Path) -> str:
 
 def _kill_process_group(process: subprocess.Popen) -> None:
     """Terminate and reap the collector's whole process group."""
+    pgid = None
     if os.name == "posix":
         try:
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            pgid = os.getpgid(process.pid)
+            os.killpg(pgid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
+            pgid = None
             process.kill()
     else:
         process.kill()
@@ -106,7 +115,8 @@ def _kill_process_group(process: subprocess.Popen) -> None:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
-    reap_children()
+    if pgid is not None:
+        reap_process_group(pgid)
 
 
 def _run_collector_capped(

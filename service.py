@@ -55,6 +55,15 @@ def run_inspection(repo_url: str) -> dict:
     """Clone one public repository and run static inspection only."""
     repo_url = str(repo_url or "").strip()
     with acquire_repository(repo_url) as acquired:
+        per_file_limit = acquired.limits["max_per_file_bytes"]
+        for path in acquired.path.rglob("*"):
+            if path.is_symlink() or not path.is_file():
+                continue
+            if path.stat().st_size > per_file_limit:
+                raise AcquisitionError(
+                    f"file exceeds per-file limit {per_file_limit}: "
+                    f"{path.relative_to(acquired.path)}"
+                )
         result = audit_path(acquired.path)
         result["inspection_scope"] = {
             "static_only": True,
@@ -141,6 +150,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlsplit(self.path)
         path = parsed.path
+        if path in {"/audit", "/checkout", "/paid", "/operator/audit"}:
+            return self.reply(
+                410,
+                {
+                    "error": "retired endpoint",
+                    "replacement": "/inspect",
+                    "reason": "static inspection is not a complete repository audit",
+                },
+            )
         limit = MCP_MAX_REQUEST_BYTES if path == "/mcp" else MAX_REQUEST_BYTES
         length = int(self.headers.get("Content-Length", 0) or 0)
         if length <= 0 or length > limit:
@@ -195,16 +213,6 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
 
-        if path in {"/audit", "/checkout", "/paid", "/operator/audit"}:
-            return self.reply(
-                410,
-                {
-                    "error": "retired endpoint",
-                    "replacement": "/inspect",
-                    "reason": "static inspection is not a complete repository audit",
-                },
-            )
-
         try:
             if path == "/v1/skills/resolve":
                 body = api.reject_unknown_fields(self.request_json(), _RESOLVE_FIELDS, "skills.resolve")
@@ -232,14 +240,14 @@ class Handler(BaseHTTPRequestHandler):
                     200,
                     api.v1_query(
                         collection=body.get("collection"),
-                        repo_url=body.get("repo_url"),
-                        revision=body.get("revision"),
-                        convention=body.get("convention"),
-                        fact_kind=body.get("fact_kind"),
-                        standing=body.get("standing"),
-                        subject_contains=body.get("subject_contains"),
-                        path_glob=body.get("path_glob"),
-                        diagnostic_status=body.get("diagnostic_status"),
+                        repo_url=api.validate_optional_str(body.get("repo_url"), "repo_url"),
+                        revision=api.validate_optional_str(body.get("revision"), "revision"),
+                        convention=api.validate_optional_str(body.get("convention"), "convention"),
+                        fact_kind=api.validate_optional_str(body.get("fact_kind"), "fact_kind"),
+                        standing=api.validate_optional_str(body.get("standing"), "standing"),
+                        subject_contains=api.validate_optional_str(body.get("subject_contains"), "subject_contains"),
+                        path_glob=api.validate_optional_str(body.get("path_glob"), "path_glob"),
+                        diagnostic_status=api.validate_optional_str(body.get("diagnostic_status"), "diagnostic_status"),
                         diagnostics_only=bool(body.get("diagnostics_only", False)),
                         limit=api.validate_limit(body.get("limit"), 200, 1000),
                     ),

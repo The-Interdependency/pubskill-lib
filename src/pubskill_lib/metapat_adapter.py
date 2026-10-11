@@ -140,16 +140,26 @@ def _import_metapat():
     if package_src not in sys.path:
         sys.path.insert(0, package_src)
     root_resolved = root.resolve()
-    for module_name in ("metapat.catalog", "metapat.structural_recurrence"):
+
+    def _module_inside(module) -> bool:
+        paths = getattr(module, "__path__", None)
+        if paths:
+            return all(root_resolved in Path(str(path)).resolve().parents for path in paths)
+        module_file = getattr(module, "__file__", None)
+        return bool(module_file) and root_resolved in Path(str(module_file)).resolve().parents
+
+    for module_name in ("metapat", "metapat.catalog", "metapat.structural_recurrence"):
         loaded = sys.modules.get(module_name)
-        if loaded is not None:
-            module_file = getattr(loaded, "__file__", None)
-            if not module_file or root_resolved not in Path(module_file).resolve().parents:
-                raise MetapatUnavailable(
-                    f"preloaded {module_name} does not resolve inside the pinned METAPAT checkout"
-                )
+        if loaded is not None and not _module_inside(loaded):
+            raise MetapatUnavailable(
+                f"preloaded {module_name} does not resolve inside the pinned METAPAT checkout"
+            )
     from metapat.catalog import CATALOG_VERSION, canonical_semantic_catalog
     from metapat.structural_recurrence import RecurrenceEvidence, adjudicate_recurrence
+
+    for module in (sys.modules.get("metapat"), sys.modules.get("metapat.catalog"), sys.modules.get("metapat.structural_recurrence")):
+        if module is not None and not _module_inside(module):
+            raise MetapatUnavailable("imported METAPAT modules do not resolve inside the pinned checkout")
 
     return CATALOG_VERSION, canonical_semantic_catalog, RecurrenceEvidence, adjudicate_recurrence
 

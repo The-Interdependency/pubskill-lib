@@ -36,6 +36,24 @@ def rpc(url: str, request_id: int, method: str, params: dict | None = None) -> d
         return json.loads(body) if body.strip() else {}
 
 
+def notify(url: str, method: str, params: dict | None = None) -> None:
+    """Send a JSON-RPC notification (no id; the server must not reply)."""
+    payload = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        payload["params"] = params
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        response.read()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8080/mcp")
@@ -52,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             "clientInfo": {"name": "pubskill-local-client", "version": "0.1.0"},
         })
         show("initialize", initialized)
-        rpc(args.url, 2, "notifications/initialized")
+        notify(args.url, "notifications/initialized")
 
         tools = rpc(args.url, 3, "tools/list")
         show("tools/list", tools)

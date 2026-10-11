@@ -57,11 +57,26 @@ def _is_valid_collection(collection: object) -> bool:
         return False
     if collection.get("schema_version") != "2.0.0":
         return False
-    for key in ("facts", "declarations", "edges", "diagnostics"):
-        value = collection.get(key, [])
+    if not isinstance(collection.get("repo"), str) or not collection["repo"]:
+        return False
+    if not isinstance(collection.get("source"), dict):
+        return False
+    if not isinstance(collection.get("coverage"), dict):
+        return False
+    for key in ("facts", "declarations", "edges", "diagnostics", "reader_manifests", "reader_runs"):
+        value = collection.get(key)
         if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
             return False
     return True
+
+
+def validate_optional_str(value: object, name: str) -> str | None:
+    """Reject non-string optional filter values with a client error."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    return value
 
 
 def v1_identity() -> dict:
@@ -102,7 +117,9 @@ def v1_get_resource(name: str, relative: str) -> dict:
 
 
 def v1_resolve(query: str, limit: int | None = None) -> dict:
-    kwargs = {"limit": 10 if limit is None else limit}
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("query must be a non-empty string")
+    kwargs = {"limit": validate_limit(limit, 10, 50)}
     resolved = catalog_module.resolve_skills(query, **kwargs)
     return response_envelope("skills.resolve", resolved, input_identity={"query": query})
 

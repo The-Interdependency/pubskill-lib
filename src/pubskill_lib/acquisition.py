@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Iterator
 from urllib.parse import urlsplit
 
-from .reaper import reap_children
+from .reaper import reap_process_group
 
 ALLOWED_GIT_HOSTS = {
     "github.com",
@@ -170,10 +170,13 @@ def _repo_size_bytes(root: Path) -> tuple[int, int]:
 
 def _kill_git_process_group(process: subprocess.Popen) -> None:
     """Terminate and reap the whole git process group."""
+    pgid = None
     if os.name == "posix":
         try:
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            pgid = os.getpgid(process.pid)
+            os.killpg(pgid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
+            pgid = None
             process.kill()
     else:
         process.kill()
@@ -181,7 +184,8 @@ def _kill_git_process_group(process: subprocess.Popen) -> None:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
-    reap_children()
+    if pgid is not None:
+        reap_process_group(pgid)
 
 
 def _run_git_limited(

@@ -42,10 +42,13 @@ class IdentityTests(unittest.TestCase):
             "yaml", "docstring_parser", "tree_sitter", "tree_sitter_rust",
             "tree_sitter_java", "tree_sitter_c", "tree_sitter_cpp",
         })
-        self.assertEqual(
-            status["missing"],
-            [name for name, present in status["python_runtimes"].items() if not present],
-        )
+        for name, present in status["python_runtimes"].items():
+            if not present:
+                self.assertIn(name, status["missing"])
+        if not status["node"]:
+            self.assertIn("node", status["missing"])
+        elif status["typescript_tsc"] is None:
+            self.assertIn("typescript_tsc", status["missing"])
 
     def test_consumer_commit_prefers_build_identity_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -367,6 +370,19 @@ class QueryTests(unittest.TestCase):
             api.v1_query(collection={"schema": "the-interdependency.msdmd-collection", "schema_version": "1.0.0"})
         with self.assertRaises(ValueError):
             api.v1_query(collection={"schema": "the-interdependency.msdmd-collection", "schema_version": "2.0.0", "facts": [None]})
+        with self.assertRaises(ValueError):
+            api.v1_query(collection={"schema": "the-interdependency.msdmd-collection", "schema_version": "2.0.0", "facts": [], "repo": "x"})
+
+    def test_query_rejects_long_or_malformed_filters(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            _make_git_fixture(root)
+            collection = collections.collect_metadata(root, "fixture/repo", strict=True).collection
+            with self.assertRaises(ValueError):
+                queries.query_collection(collection, subject_contains="x" * 257)
+            with self.assertRaises(ValueError):
+                queries.query_collection(collection, subject_contains={})
 
 
 class AcquisitionBoundaryTests(unittest.TestCase):

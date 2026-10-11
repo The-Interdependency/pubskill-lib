@@ -2,25 +2,32 @@
 from __future__ import annotations
 
 import fnmatch
+from itertools import islice
 from typing import Any, Callable
 
 _FACT_KEYS = ("address", "convention", "extraction", "kind", "native", "origin", "source", "standing", "subject")
 _DIAGNOSTIC_KEYS = ("code", "status", "severity", "message", "reader_id", "source", "subject")
 
+MAX_FILTER_LENGTH = 256
 
-def _contains(value: object, needle: str) -> bool:
-    """Recursive string search over scalars and containers."""
+
+def _contains(value: object, needle_lower: str) -> bool:
+    """Recursive string search over scalars and containers.
+
+    ``needle_lower`` must already be lowercased by the caller so the needle is
+    normalized once per query instead of once per visited record.
+    """
     if isinstance(value, str):
-        return needle.lower() in value.lower()
+        return needle_lower in value.lower()
     if isinstance(value, dict):
-        return any(_contains(item, needle) for item in value.values())
+        return any(_contains(item, needle_lower) for item in value.values())
     if isinstance(value, (list, tuple)):
-        return any(_contains(item, needle) for item in value)
+        return any(_contains(item, needle_lower) for item in value)
     return False
 
 
-def _matches(item: dict, needle: str, key: str) -> bool:
-    return _contains(item.get(key), needle)
+def _matches(item: dict, needle_lower: str, key: str) -> bool:
+    return _contains(item.get(key), needle_lower)
 
 
 def _source_path(item: dict) -> str | None:
@@ -43,6 +50,19 @@ def _convention_matches(item: dict, convention: str) -> bool:
     return False
 
 
+def _validate_filter(name: str, value: str | None) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    if len(value) > MAX_FILTER_LENGTH:
+        raise ValueError(f"{name} must be at most {MAX_FILTER_LENGTH} characters")
+
+
+def _take(items: list[dict], predicate: Callable[[dict], bool], limit: int) -> list[dict]:
+    return list(islice((item for item in items if predicate(item)), limit))
+
+
 def query_collection(
     collection: dict,
     *,
@@ -62,6 +82,16 @@ def query_collection(
     """
     if limit < 1 or limit > 1000:
         raise ValueError("limit must be between 1 and 1000")
+    for name, value in (
+        ("convention", convention),
+        ("fact_kind", fact_kind),
+        ("standing", standing),
+        ("subject_contains", subject_contains),
+        ("path_glob", path_glob),
+        ("diagnostic_status", diagnostic_status),
+    ):
+        _validate_filter(name, value)
+    subject_lower = subject_contains.lower() if subject_contains else None
 
     facts = [item for item in collection.get("facts", []) if isinstance(item, dict)]
     declarations = [item for item in collection.get("declarations", []) if isinstance(item, dict)]
@@ -75,7 +105,7 @@ def query_collection(
             return False
         if standing and item.get("standing") != standing:
             return False
-        if subject_contains and not _matches(item, subject_contains, "subject"):
+        if subject_lower is not None and not _matches(item, subject_lower, "subject"):
             return False
         if path_glob:
             path = _source_path(item)
@@ -88,7 +118,7 @@ def query_collection(
             return False
         if fact_kind and item.get("kind") != fact_kind:
             return False
-        if subject_contains and not _matches(item, subject_contains, "subject"):
+        if subject_lower is not None and not _matches(item, subject_lower, "subject"):
             return False
         return True
 
@@ -106,10 +136,10 @@ def query_collection(
             return False
         return True
 
-    matched_facts = [] if diagnostics_only else [item for item in facts if fact_ok(item)][:limit]
-    matched_declarations = [] if diagnostics_only else [item for item in declarations if decl_ok(item)][:limit]
-    matched_edges = [] if diagnostics_only else [item for item in edges if edge_ok(item)][:limit]
-    matched_diagnostics = [item for item in diagnostics if diag_ok(item)][:limit]
+    matched_facts = [] if diagnostics_only else _take(facts, fact_ok, limit)
+    matched_declarations = [] if diagnostics_only else _take(declarations, decl_ok, limit)
+    matched_edges = [] if diagnostics_only else _take(edges, edge_ok, limit)
+    matched_diagnostics = _take(diagnostics, diag_ok, limit)
 
     return {
         "collection_schema": collection.get("schema"),

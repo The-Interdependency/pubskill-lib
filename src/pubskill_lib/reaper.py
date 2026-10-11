@@ -1,9 +1,9 @@
 """Process-group reaping helpers for bounded subprocess execution.
 
 On Linux the service marks itself as a child subreaper so grandchildren of a
-killed process group reparent to the service instead of PID 1; the service then
-reaps them, preventing zombie accumulation when Python runs as PID 1 in a
-container.
+killed process group reparent to the service instead of PID 1. Reaping is
+scoped by process group: only adopted children from the terminated group are
+collected, never children owned by other in-flight requests.
 """
 from __future__ import annotations
 
@@ -24,14 +24,24 @@ def enable_child_subreaper() -> bool:
         return False
 
 
-def reap_children() -> None:
-    """Reap all adopted children without blocking."""
+def reap_process_group(pgid: int) -> None:
+    """Reap adopted children from one terminated process group only.
+
+    ``waitid(P_PGID)`` can only collect children of the calling process, so
+    descendants that reparented to this subreaper are collected while direct
+    children belonging to other concurrent requests (different process groups)
+    are left untouched.
+    """
     if os.name != "posix":
         return
-    while True:
-        try:
-            pid, _status = os.waitpid(-1, os.WNOHANG)
-        except ChildProcessError:
-            return
-        if pid == 0:
-            return
+    waitid = getattr(os, "waitid", None)
+    p_pgid = getattr(os, "P_PGID", None)
+    if waitid is None or p_pgid is None:  # pragma: no cover - non-Linux POSIX
+        return
+    try:
+        while True:
+            info = waitid(p_pgid, -pgid, os.WEXITED | os.WNOHANG)
+            if info is None or getattr(info, "si_pid", 0) == 0:
+                return
+    except (ChildProcessError, OSError):
+        return

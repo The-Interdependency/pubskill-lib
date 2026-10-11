@@ -54,6 +54,24 @@ def rpc(url: str, request_id: int, method: str, params: dict | None = None) -> d
         return json.loads(body) if body.strip() else {}
 
 
+def notify(url: str, method: str, params: dict | None = None) -> None:
+    """Send a JSON-RPC notification (no id; the server must not reply)."""
+    payload = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        payload["params"] = params
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=420) as response:
+        response.read()
+
+
 def tool_call(url: str, request_id: int, name: str, arguments: dict) -> dict:
     response = rpc(url, request_id, "tools/call", {"name": name, "arguments": arguments})
     result = response.get("result", {})
@@ -102,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
         server = initialized["result"]["serverInfo"]
         print(f"pubskill MCP demo — {server['name']} {server['version']} "
               f"(MCP {initialized['result']['protocolVersion']})", flush=True)
-        rpc(args.url, 2, "notifications/initialized")
+        notify(args.url, "notifications/initialized")
 
         request_id = 10
         section(1, "pubskill_identity — who is serving")

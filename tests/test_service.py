@@ -53,7 +53,10 @@ class ServiceBoundaryTests(unittest.TestCase):
 
         @contextmanager
         def fake_acquire(*args, **kwargs):
-            yield SimpleNamespace(path=Path(tempfile.gettempdir()) / "fake-repo")
+            yield SimpleNamespace(
+                path=Path(tempfile.gettempdir()) / "fake-repo",
+                limits={"max_per_file_bytes": 2 * 1024 * 1024},
+            )
 
         with (
             patch.object(service, "acquire_repository", side_effect=fake_acquire),
@@ -68,6 +71,19 @@ class ServiceBoundaryTests(unittest.TestCase):
         self.assertFalse(scope["installs_target_dependencies"])
         self.assertFalse(scope["runs_target_tests"])
         self.assertFalse(scope["runtime_verified"])
+
+    def test_inspection_enforces_per_file_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "big.txt").write_bytes(b"x" * (2 * 1024 * 1024 + 1))
+
+            @contextmanager
+            def fake_acquire(*args, **kwargs):
+                yield SimpleNamespace(path=root, limits={"max_per_file_bytes": 2 * 1024 * 1024})
+
+            with patch.object(service, "acquire_repository", side_effect=fake_acquire):
+                with self.assertRaises(AcquisitionError):
+                    service.run_inspection("https://github.com/owner/repo")
 
     def test_paid_audit_functions_are_removed(self) -> None:
         for name in (
@@ -158,6 +174,29 @@ class ServiceBoundaryTests(unittest.TestCase):
                 thread.join(timeout=5)
                 server.server_close()
                 self.assertEqual(second_status, 429)
+
+    def test_retired_endpoints_return_410_before_body_parsing(self) -> None:
+        import http.client
+
+        server = service.ThreadingHTTPServer(("127.0.0.1", 0), service.Handler)
+        server.daemon_threads = True
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        connection.request("POST", "/audit", body=b"", headers={"Content-Type": "application/json"})
+        response = connection.getresponse()
+        self.assertEqual(response.status, 410)
+        response.read()
+        connection.close()
+        thread.join(timeout=5)
+        server.server_close()
+
+    def test_skill_runtime_ignore_excludes_caches(self) -> None:
+        from pubskill_lib.packaging_helpers import ignore_skill_runtime
+
+        ignored = ignore_skill_runtime(".", ["__pycache__", "node_modules", "x.pyc", "real.txt"])
+        self.assertEqual(ignored, {"__pycache__", "node_modules", "x.pyc"})
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from setuptools import setup
@@ -21,6 +22,8 @@ from setuptools.command.build_py import build_py
 
 ROOT = Path(__file__).resolve().parent
 SKILLS_SOURCE = ROOT / ".agents" / "skills"
+sys.path.insert(0, str(ROOT / "src"))
+from pubskill_lib.packaging_helpers import ignore_skill_runtime  # noqa: E402
 
 
 def _consumer_commit() -> str:
@@ -56,6 +59,11 @@ def _consumer_commit() -> str:
         return "hmmm"
 
 
+def _ignore_skill_runtime(directory: str, names: list[str]) -> set[str]:
+    """Exclude generated caches and installed reader runtimes from the wheel."""
+    return ignore_skill_runtime(directory, names)
+
+
 class build_py_with_skills(build_py):
     def run(self) -> None:
         super().run()
@@ -64,7 +72,7 @@ class build_py_with_skills(build_py):
         destination = Path(self.build_lib) / "pubskill_lib" / "_skills"
         if destination.exists():
             shutil.rmtree(destination)
-        shutil.copytree(SKILLS_SOURCE, destination)
+        shutil.copytree(SKILLS_SOURCE, destination, ignore=_ignore_skill_runtime)
         build_identity = Path(self.build_lib) / "pubskill_lib" / "_build.json"
         build_identity.write_text(
             json.dumps(
