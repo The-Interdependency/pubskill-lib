@@ -3,10 +3,10 @@
 The service clones supported public HTTPS repositories into an isolated
 temporary worktree, resolves an immutable commit, and deletes the worktree
 after the receipt is built. Target code is never installed, executed, or
-instructed; git hooks, credential helpers, LFS smudging and submodule recursion
-are disabled before any fetch. Repository byte and file-count caps are
-enforced while Git is running, not only after it has finished materializing
-the worktree.
+instructed; Git runs without inherited credentials or configuration, and hooks,
+credential helpers, LFS smudging and submodule recursion are disabled before any
+fetch. Repository byte and file-count caps are enforced while Git is running,
+not only after it has finished materializing the worktree.
 """
 from __future__ import annotations
 
@@ -67,8 +67,32 @@ _GIT_SAFE_CONFIG = [
 _GIT_ISOLATED_ENV = {
     "GIT_TERMINAL_PROMPT": "0",
     "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_SYSTEM": os.devnull,
     "GIT_CONFIG_GLOBAL": os.devnull,
 }
+
+
+def _git_environment(home: Path) -> dict[str, str]:
+    """Give public acquisition no access to the service's Git credentials.
+
+    An allowlist is intentional: removing known Git variables from a copied
+    environment leaves other credential/configuration channels available.
+    The private empty home also excludes curl's .netrc and XDG Git settings.
+    Only executable lookup is inherited; proxy credentials, askpass programs,
+    environment-injected Git config and runtime-loader overrides are not.
+    """
+    env = {
+        "PATH": os.environ.get("PATH", os.defpath),
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home),
+        **_GIT_ISOLATED_ENV,
+    }
+    # Windows needs its OS directory to locate system DLLs. It is not a Git
+    # configuration or credential channel; user-profile paths stay isolated.
+    if os.name == "nt":
+        env["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", r"C:\Windows")
+        env["USERPROFILE"] = str(home)
+    return env
 
 
 class AcquisitionError(RuntimeError):
@@ -209,7 +233,9 @@ def acquire_repository(
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="pubskill-acquire-") as tempdir:
         target = Path(tempdir) / "repo"
-        env = dict(os.environ, **_GIT_ISOLATED_ENV)
+        home = Path(tempdir) / "home"
+        home.mkdir(mode=0o700)
+        env = _git_environment(home)
         checkout_timeout = {
             **effective_limits,
             "fetch_timeout_seconds": effective_limits["checkout_timeout_seconds"],
