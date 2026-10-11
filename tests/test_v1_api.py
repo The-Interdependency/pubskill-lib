@@ -62,7 +62,11 @@ class IdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _make_git_fixture(root)
-            with mock.patch.object(identity, "REPO_ROOT", root):
+            package_root = Path(directory) / "package"
+            with (
+                mock.patch.object(identity, "PACKAGE_ROOT", package_root),
+                mock.patch.object(identity, "REPO_ROOT", root),
+            ):
                 self.assertRegex(identity.consumer_commit(), r"^[0-9a-f]{40}$")
                 (root / "example.py").write_text("dirty\n", encoding="utf-8")
                 self.assertEqual(identity.consumer_commit(), "hmmm")
