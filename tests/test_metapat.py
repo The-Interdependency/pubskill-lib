@@ -164,6 +164,17 @@ class MetapatAdapterTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 metapat_adapter.classify_recurrence({**self._evidence(), "extra": 1})
 
+    def test_malformed_evidence_types_are_rejected(self):
+        with mock.patch.dict(os.environ, self.pin_env):
+            with self.assertRaises(ValueError):
+                metapat_adapter.classify_recurrence(
+                    {**self._evidence(), "declared_invariants": "abc"}
+                )
+            with self.assertRaises(ValueError):
+                metapat_adapter.classify_recurrence(
+                    {**self._evidence(), "mapping_complete": "yes"}
+                )
+
     def test_v1_recurrence_envelope(self):
         with mock.patch.dict(os.environ, self.pin_env):
             response = api.v1_metapat_recurrence(self._evidence())

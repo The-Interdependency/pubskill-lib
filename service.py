@@ -27,6 +27,7 @@ from pubskill_lib.acquisition import (
 from pubskill_lib.audit import audit_path
 from pubskill_lib.collections import CollectionError, CollectionTimeoutError
 from pubskill_lib.metapat_adapter import MetapatUnavailable
+from pubskill_lib.reaper import enable_child_subreaper
 
 MAX_REQUEST_BYTES = 1024 * 1024
 MCP_MAX_REQUEST_BYTES = 4 * 1024 * 1024
@@ -259,6 +260,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    enable_child_subreaper()
     ThreadingHTTPServer(
         ("0.0.0.0", int(os.environ.get("PORT", "8080"))),
         Handler,

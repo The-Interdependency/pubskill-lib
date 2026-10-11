@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import tempfile
 import threading
@@ -21,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 from urllib.parse import urlsplit
+
+from .reaper import reap_children
 
 ALLOWED_GIT_HOSTS = {
     "github.com",
@@ -154,10 +157,31 @@ def _repo_size_bytes(root: Path) -> tuple[int, int]:
         if path.is_symlink():
             count += 1
             continue
-        if path.is_file():
-            count += 1
-            total += path.stat().st_size
+        try:
+            if path.is_file():
+                count += 1
+                total += path.stat().st_size
+        except FileNotFoundError:
+            # Git renames pack/lock files while it works; a transient entry
+            # disappearing mid-scan is normal churn, not a limit violation.
+            continue
     return total, count
+
+
+def _kill_git_process_group(process: subprocess.Popen) -> None:
+    """Terminate and reap the whole git process group."""
+    if os.name == "posix":
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            process.kill()
+    else:
+        process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+    reap_children()
 
 
 def _run_git_limited(
@@ -170,40 +194,51 @@ def _run_git_limited(
     """Run a git command while enforcing byte/file caps on the worktree.
 
     A monitor thread walks the target directory while the git process is
-    running and terminates it as soon as either cap is crossed, so an
-    oversized fetch or checkout cannot finish materializing before rejection.
+    running and terminates the whole process group as soon as either cap is
+    crossed, so an oversized fetch or checkout cannot finish materializing
+    before rejection and git's helper children cannot outlive the request.
     """
+    popen_kwargs = {}
+    if os.name == "posix":
+        popen_kwargs["start_new_session"] = True
     process = subprocess.Popen(
         ["git"] + _GIT_SAFE_CONFIG + args,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
+        **popen_kwargs,
     )
     exceeded: list[str] = []
+    monitor_failures: list[BaseException] = []
 
     def monitor() -> None:
-        while process.poll() is None:
-            size, count = _repo_size_bytes(target)
-            if size > limits["max_repo_bytes"]:
-                exceeded.append("max_repo_bytes")
-                process.kill()
-                return
-            if count > limits["max_file_count"]:
-                exceeded.append("max_file_count")
-                process.kill()
-                return
-            time.sleep(0.2)
+        try:
+            while process.poll() is None:
+                size, count = _repo_size_bytes(target)
+                if size > limits["max_repo_bytes"]:
+                    exceeded.append("max_repo_bytes")
+                    _kill_git_process_group(process)
+                    return
+                if count > limits["max_file_count"]:
+                    exceeded.append("max_file_count")
+                    _kill_git_process_group(process)
+                    return
+                time.sleep(0.2)
+        except BaseException as error:  # noqa: BLE001 - monitor must not die silently
+            monitor_failures.append(error)
+            _kill_git_process_group(process)
 
     thread = threading.Thread(target=monitor, daemon=True)
     thread.start()
     try:
         stdout, stderr = process.communicate(timeout=limits["fetch_timeout_seconds"])
     except subprocess.TimeoutExpired as error:
-        process.kill()
-        process.communicate()
+        _kill_git_process_group(process)
         raise AcquisitionTimeoutError("repository acquisition timed out") from error
     finally:
         thread.join(timeout=1)
+    if monitor_failures:
+        raise AcquisitionError(f"repository limit monitor failed: {monitor_failures[0]!r}")
     if exceeded:
         raise AcquisitionError(
             f"repository exceeded {exceeded[0]} limit {limits[exceeded[0]]} during acquisition"

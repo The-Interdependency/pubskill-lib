@@ -332,6 +332,19 @@ def handle_jsonrpc(payload: dict) -> dict | None:
         return _jsonrpc_error(request_id, code, message)
 
     if method == "initialize":
+        init_params = payload.get("params")
+        if (
+            not isinstance(init_params, dict)
+            or not isinstance(init_params.get("protocolVersion"), str)
+            or not isinstance(init_params.get("capabilities"), dict)
+            or not isinstance(init_params.get("clientInfo"), dict)
+            or not isinstance(init_params["clientInfo"].get("name"), str)
+            or not isinstance(init_params["clientInfo"].get("version"), str)
+        ):
+            return respond_error(
+                JSONRPC_INVALID_PARAMS,
+                "initialize requires protocolVersion, capabilities and clientInfo",
+            )
         return respond(
             {
                 "protocolVersion": PROTOCOL_VERSION,
@@ -492,6 +505,9 @@ def main(argv: list[str] | None = None) -> int:
     # Serve MCP over the same stdlib HTTP server pattern as service.py.
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+    from .reaper import enable_child_subreaper
+
+    enable_child_subreaper()
     port = int(__import__("os").environ.get("PORT", "8080"))
 
     class Handler(BaseHTTPRequestHandler):

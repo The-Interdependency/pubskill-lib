@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .acquisition import GIT_ISOLATED_ENV
 from .identity import skills_root
+from .reaper import reap_children
 
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
 DEFAULT_COLLECT_TIMEOUT_SECONDS = 180
@@ -105,6 +106,7 @@ def _kill_process_group(process: subprocess.Popen) -> None:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
+    reap_children()
 
 
 def _run_collector_capped(

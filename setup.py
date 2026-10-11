@@ -37,6 +37,14 @@ def _consumer_commit() -> str:
         except (OSError, json.JSONDecodeError):
             pass
     try:
+        status = subprocess.run(
+            ["git", "-C", str(ROOT), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if status.returncode != 0 or status.stdout.strip():
+            return "hmmm"
         result = subprocess.run(
             ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
             capture_output=True,

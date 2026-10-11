@@ -50,6 +50,26 @@ _EVIDENCE_OPTIONAL = {
     "unresolved",
 }
 
+_EVIDENCE_STRING_FIELDS = {
+    "source_domain",
+    "target_domain",
+    "source_origin_id",
+    "target_origin_id",
+    "source_path_id",
+    "target_path_id",
+    "catalog_version",
+    "catalog_digest",
+    "equivalence_proof_id",
+}
+_EVIDENCE_STRING_ARRAY_FIELDS = {
+    "declared_invariants",
+    "preserved_invariants",
+    "catalog_module_ids",
+    "shared_ancestry",
+    "unresolved",
+}
+_EVIDENCE_BOOL_FIELDS = {"mapping_complete", "replay_passed", "ancestry_resolved"}
+
 
 class MetapatUnavailable(RuntimeError):
     """METAPAT is not enabled, not pinned, or failed its identity check."""
@@ -157,6 +177,16 @@ def _validate_evidence_fields(evidence: dict) -> dict:
     missing = sorted(_EVIDENCE_REQUIRED - set(evidence))
     if missing:
         raise ValueError(f"missing fields in recurrence evidence: {', '.join(missing)}")
+    for field in _EVIDENCE_STRING_FIELDS:
+        if field in evidence and evidence[field] is not None and not isinstance(evidence[field], str):
+            raise ValueError(f"evidence field {field} must be a string")
+    for field in _EVIDENCE_STRING_ARRAY_FIELDS:
+        if field in evidence and evidence[field] is not None:
+            if not isinstance(evidence[field], list) or any(not isinstance(item, str) for item in evidence[field]):
+                raise ValueError(f"evidence field {field} must be an array of strings")
+    for field in _EVIDENCE_BOOL_FIELDS:
+        if field in evidence and evidence[field] is not None and not isinstance(evidence[field], bool):
+            raise ValueError(f"evidence field {field} must be a boolean")
     return evidence
 
 

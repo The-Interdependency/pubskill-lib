@@ -58,6 +58,15 @@ class IdentityTests(unittest.TestCase):
             with mock.patch.object(identity, "PACKAGE_ROOT", package_root):
                 self.assertEqual(identity.consumer_commit(), "a" * 40)
 
+    def test_consumer_commit_reports_hmmm_for_dirty_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _make_git_fixture(root)
+            with mock.patch.object(identity, "REPO_ROOT", root):
+                self.assertRegex(identity.consumer_commit(), r"^[0-9a-f]{40}$")
+                (root / "example.py").write_text("dirty\n", encoding="utf-8")
+                self.assertEqual(identity.consumer_commit(), "hmmm")
+
 
 class CatalogTests(unittest.TestCase):
     def test_list_skills_is_full_catalog_bound_to_pin(self):

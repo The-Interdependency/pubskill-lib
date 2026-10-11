@@ -130,6 +130,17 @@ class McpJsonRpcTests(unittest.TestCase):
         )
         self.assertTrue(response["result"]["isError"])
 
+    def test_initialize_requires_negotiation_parameters(self):
+        response = mcp_server.handle_jsonrpc(
+            {"jsonrpc": "2.0", "id": 20, "method": "initialize", "params": {}}
+        )
+        self.assertEqual(response["error"]["code"], -32602)
+        response = mcp_server.handle_jsonrpc(
+            {"jsonrpc": "2.0", "id": 21, "method": "initialize",
+             "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {}}}
+        )
+        self.assertEqual(response["error"]["code"], -32602)
+
     def test_method_not_found_returns_jsonrpc_error(self):
         response = mcp_server.handle_jsonrpc(rpc(10, "no/such/method"))
         self.assertEqual(response["error"]["code"], -32601)
@@ -305,6 +316,16 @@ class FixtureReplayTests(unittest.TestCase):
         self.assertTrue(
             all(item.get("severity") != "error" for item in collection["diagnostics"]),
             "fixture collection contains error diagnostics",
+        )
+
+    def test_full_runtime_fixture_is_committed_and_distinct(self):
+        full_path = REPO / "examples" / "metadata-repo-expected" / "collection-normalized-full.json"
+        collection = json.loads(full_path.read_text(encoding="utf-8"))
+        self.assertEqual(collection["schema"], "the-interdependency.msdmd-collection")
+        self.assertEqual(collection["schema_version"], "2.0.0")
+        self.assertNotEqual(
+            full_path.read_text(encoding="utf-8"),
+            self.EXPECTED.read_text(encoding="utf-8"),
         )
 
 

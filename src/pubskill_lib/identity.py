@@ -55,8 +55,9 @@ def consumer_commit() -> str:
     """Return the recorded consumer source identity.
 
     Installed artifacts carry a build-time identity in ``_build.json``;
-    source checkouts fall back to the checked-out Git HEAD. A missing value is
-    reported as ``hmmm``, never guessed.
+    source checkouts fall back to the checked-out Git HEAD only when the
+    worktree is clean. Dirty or missing values are reported as ``hmmm``,
+    never guessed.
     """
     build_identity = PACKAGE_ROOT / "_build.json"
     if build_identity.is_file():
@@ -68,6 +69,14 @@ def consumer_commit() -> str:
         except (OSError, json.JSONDecodeError):
             pass
     try:
+        status = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if status.returncode != 0 or status.stdout.strip():
+            return "hmmm"
         result = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
             capture_output=True,
