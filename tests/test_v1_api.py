@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from pubskill_lib import acquisition, api, collections, identity, queries
+from pubskill_lib import acquisition, api, catalog as catalog_module, collections, identity, queries
 from pubskill_lib.acquisition import (
     AcquisitionError,
     acquire_repository,
@@ -123,7 +123,7 @@ class CatalogTests(unittest.TestCase):
                 "skills": [{
                     "name": "sym-skill",
                     "path": "sym-skill/SKILL.md",
-                    "digest": "0" * 64,
+                    "digest": catalog_module._digest_tree(skill_dir),
                     "source_commit": "0" * 40,
                 }],
             }
@@ -155,7 +155,7 @@ class CatalogTests(unittest.TestCase):
                 "skills": [{
                     "name": "sym-skill",
                     "path": "sym-skill/SKILL.md",
-                    "digest": "0" * 64,
+                    "digest": catalog_module._digest_tree(skill_dir),
                     "source_commit": "0" * 40,
                 }],
             }
@@ -173,6 +173,38 @@ class CatalogTests(unittest.TestCase):
         self.assertRegex(resource["digest"], r"^[0-9a-f]{64}$")
         with self.assertRaises(ValueError):
             api.v1_get_resource("doctrine", "../skills.json")
+
+    def test_shared_readme_resource_is_retrievable(self):
+        resource = api.v1_get_resource("shared", "README.md")["resource"]
+        self.assertEqual(resource["name"], "shared")
+        self.assertRegex(resource["digest"], r"^[0-9a-f]{64}$")
+        with self.assertRaises(ValueError):
+            api.v1_get_resource("shared", "../catalog.json")
+
+    def test_modified_skill_bytes_fail_catalog_digest_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root / "skills"
+            skill_dir = skills / "sym-skill"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("---\nname: sym-skill\ndescription: drifted\n---\n", encoding="utf-8")
+            catalog_manifest = {
+                "schema": "pubskill-lib.catalog",
+                "version": 1,
+                "producer": {"repository": "The-Interdependency/skill-lib", "commit": "0" * 40},
+                "skill_count": 1,
+                "propagated_set_digest": "0" * 64,
+                "skills": [{
+                    "name": "sym-skill",
+                    "path": "sym-skill/SKILL.md",
+                    "digest": "f" * 64,
+                    "source_commit": "0" * 40,
+                }],
+            }
+            (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+                with self.assertRaises(ValueError):
+                    api.v1_get_skill("sym-skill")
 
     def test_resource_listing_excludes_installed_reader_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -192,7 +224,7 @@ class CatalogTests(unittest.TestCase):
                 "skills": [{
                     "name": "sym-skill",
                     "path": "sym-skill/SKILL.md",
-                    "digest": "0" * 64,
+                    "digest": catalog_module._digest_tree(skill_dir),
                     "source_commit": "0" * 40,
                 }],
             }

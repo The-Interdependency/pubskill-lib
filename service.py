@@ -13,6 +13,7 @@ import json
 import os
 import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -83,7 +84,33 @@ def max_workers() -> int:
     return int(os.environ.get("PUBSKILL_MAX_WORKERS", "4"))
 
 
+def max_body_readers() -> int:
+    return int(os.environ.get("PUBSKILL_MAX_BODY_READERS", "8"))
+
+
 WORKER_SEMAPHORE = threading.BoundedSemaphore(max_workers())
+BODY_READER_SEMAPHORE = threading.BoundedSemaphore(max_body_readers())
+
+
+def _read_body_bounded(rfile, length: int, timeout_seconds: int) -> bytes:
+    """Read exactly ``length`` bytes under an absolute deadline.
+
+    A socket timeout alone is an inactivity timeout; a slow-loris client can
+    keep it alive with periodic single bytes. The absolute deadline bounds
+    total time spent reading the body.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    chunks: list[bytes] = []
+    remaining = length
+    while remaining > 0:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("request body timed out")
+        chunk = rfile.read(min(65536, remaining))
+        if not chunk:
+            raise ConnectionError("request body truncated")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -94,7 +121,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        self._write_with_timeout(data)
+
+    def _write_with_timeout(self, data: bytes) -> None:
+        # A client that stops reading must not strand the worker semaphore
+        # inside wfile.write; bound the write with a socket timeout.
+        try:
+            self.request.settimeout(BODY_READ_TIMEOUT_SECONDS)
+            self.wfile.write(data)
+        except (socket.timeout, TimeoutError, OSError):
+            pass
+        finally:
+            self.request.settimeout(None)
 
     def page(self) -> None:
         data = Path("index.html").read_bytes()
@@ -103,7 +141,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        self._write_with_timeout(data)
 
     def request_json(self) -> dict:
         body = json.loads(self.raw_body)
@@ -163,15 +201,19 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0) or 0)
         if length <= 0 or length > limit:
             return self.reply(400, {"error": "invalid request body"})
-        # Read the bounded body before occupying a worker slot, with a
-        # deadline, so a slow client can never pin the semaphore by stalling.
+        # Bound concurrent body readers separately, then read under an
+        # absolute deadline before occupying a worker slot, so neither slow
+        # clients nor slow readers can pin the operation semaphore.
+        if not BODY_READER_SEMAPHORE.acquire(blocking=False):
+            return self.reply(429, {"error": "too many concurrent request bodies"})
         try:
             self.request.settimeout(BODY_READ_TIMEOUT_SECONDS)
-            self.raw_body = self.rfile.read(length)
+            self.raw_body = _read_body_bounded(self.rfile, length, BODY_READ_TIMEOUT_SECONDS)
         except (socket.timeout, TimeoutError, OSError):
             return self.reply(408, {"error": "request body timed out"})
         finally:
             self.request.settimeout(None)
+            BODY_READER_SEMAPHORE.release()
         if not WORKER_SEMAPHORE.acquire(blocking=False):
             return self.reply(429, {"error": "too many concurrent operations"})
         try:
@@ -210,7 +252,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
+            self._write_with_timeout(data)
             return
 
         try:

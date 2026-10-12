@@ -1,0 +1,23 @@
+# Fail-closed Docker build context: only source-controlled inputs enter layers.
+.git
+.gitignore
+.dockerignore
+.env
+.env.*
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+node_modules
+**/node_modules
+dist
+build
+*.egg-info
+.python-version
+.tox
+coverage

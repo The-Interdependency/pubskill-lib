@@ -101,6 +101,8 @@ def v1_get_skill(name: str) -> dict:
         skill = catalog_module.get_skill(name)
     except KeyError:
         raise ValueError(f"unknown skill: {name}") from None
+    except RuntimeError as error:
+        raise ValueError(str(error)) from None
     return response_envelope("skills.get", {"skill": skill}, input_identity={"skill": name})
 
 
@@ -109,6 +111,8 @@ def v1_get_resource(name: str, relative: str) -> dict:
         resource = catalog_module.get_resource(name, relative)
     except KeyError:
         raise ValueError(f"unknown resource: {name}/{relative}") from None
+    except RuntimeError as error:
+        raise ValueError(str(error)) from None
     return response_envelope(
         "skills.resource",
         {"resource": resource},

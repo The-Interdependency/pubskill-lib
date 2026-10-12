@@ -11,6 +11,7 @@ import os
 import socket
 import sys
 import threading
+import time
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -318,6 +319,11 @@ def handle_jsonrpc(payload: dict) -> dict | None:
     if not isinstance(method, str):
         raise ValueError("missing JSON-RPC method")
     request_id = payload.get("id")
+    if "id" in payload and not (
+        request_id is None
+        or (isinstance(request_id, (str, int, float)) and not isinstance(request_id, bool))
+    ):
+        raise ValueError("invalid JSON-RPC id")
     is_notification = "id" not in payload
     params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
 
@@ -518,39 +524,70 @@ def main(argv: list[str] | None = None) -> int:
             self.send_header("Content-Length", "0")
             self.end_headers()
 
+        def _write_json(self, payload: bytes) -> None:
+            try:
+                self.request.settimeout(10)
+                self.wfile.write(payload)
+            except (socket.timeout, TimeoutError, OSError):
+                pass
+            finally:
+                self.request.settimeout(None)
+
         def do_POST(self) -> None:  # noqa: N802
             length = int(self.headers.get("Content-Length", 0) or 0)
             if length <= 0 or length > 4 * 1024 * 1024:
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(b'{"error":"invalid request body"}')
+                self._write_json(b'{"error":"invalid request body"}')
                 return
-            # Read the bounded body before occupying a worker slot, with a
-            # deadline, so a slow client can never pin the semaphore.
+            # Bound concurrent body readers separately, then read under an
+            # absolute deadline before occupying a worker slot.
+            if not self.server.body_reader_semaphore.acquire(blocking=False):
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self._write_json(b"{}")
+                return
             try:
                 self.request.settimeout(10)
-                body = self.rfile.read(length)
+                body = self._read_body_bounded(length, 10)
             except (socket.timeout, TimeoutError, OSError):
                 self.send_response(408)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", "2")
                 self.end_headers()
-                self.wfile.write(b"{}")
+                self._write_json(b"{}")
                 return
             finally:
                 self.request.settimeout(None)
+                self.server.body_reader_semaphore.release()
             if not self.server.worker_semaphore.acquire(blocking=False):
                 self.send_response(429)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", "2")
                 self.end_headers()
-                self.wfile.write(b"{}")
+                self._write_json(b"{}")
                 return
             try:
                 self._handle_post(body)
             finally:
                 self.server.worker_semaphore.release()
+
+        def _read_body_bounded(self, length: int, timeout_seconds: int) -> bytes:
+            deadline = time.monotonic() + timeout_seconds
+            chunks: list[bytes] = []
+            remaining = length
+            while remaining > 0:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("request body timed out")
+                chunk = self.rfile.read(min(65536, remaining))
+                if not chunk:
+                    raise ConnectionError("request body truncated")
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            return b"".join(chunks)
 
         def _handle_post(self, body: bytes) -> None:
             status, content_type, data = handle_http_bytes(
@@ -565,7 +602,7 @@ def main(argv: list[str] | None = None) -> int:
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
+            self._write_json(data)
 
         def log_message(self, format, *args):  # noqa: A002
             return
@@ -575,6 +612,9 @@ def main(argv: list[str] | None = None) -> int:
             super().__init__(address, handler)
             self.worker_semaphore = threading.BoundedSemaphore(
                 int(__import__("os").environ.get("PUBSKILL_MAX_WORKERS", "4"))
+            )
+            self.body_reader_semaphore = threading.BoundedSemaphore(
+                int(__import__("os").environ.get("PUBSKILL_MAX_BODY_READERS", "8"))
             )
 
     BoundedThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

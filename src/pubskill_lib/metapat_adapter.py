@@ -188,8 +188,11 @@ def _validate_evidence_fields(evidence: dict) -> dict:
     if missing:
         raise ValueError(f"missing fields in recurrence evidence: {', '.join(missing)}")
     for field in _EVIDENCE_STRING_FIELDS:
-        if field in evidence and evidence[field] is not None and not isinstance(evidence[field], str):
-            raise ValueError(f"evidence field {field} must be a string")
+        value = evidence.get(field)
+        if value is None and field not in _EVIDENCE_REQUIRED:
+            continue
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"evidence field {field} must be a non-empty string")
     for field in _EVIDENCE_STRING_ARRAY_FIELDS:
         if field in evidence and evidence[field] is not None:
             if not isinstance(evidence[field], list) or any(not isinstance(item, str) for item in evidence[field]):

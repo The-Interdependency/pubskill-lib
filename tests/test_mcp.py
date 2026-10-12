@@ -145,6 +145,11 @@ class McpJsonRpcTests(unittest.TestCase):
         response = mcp_server.handle_jsonrpc(rpc(10, "no/such/method"))
         self.assertEqual(response["error"]["code"], -32601)
 
+    def test_structured_jsonrpc_ids_are_rejected(self):
+        for bad_id in ({}, [], True):
+            with self.assertRaises(ValueError):
+                mcp_server.handle_jsonrpc({"jsonrpc": "2.0", "id": bad_id, "method": "ping"})
+
 
 class McpHttpBytesTests(unittest.TestCase):
     ACCEPT = "application/json, text/event-stream"

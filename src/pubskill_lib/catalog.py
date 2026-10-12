@@ -53,6 +53,42 @@ def list_skills() -> list[dict]:
 
 _SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _RESOURCE_PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+_VERIFIED_SKILL_TREES: dict[tuple[str, str], Path] = {}
+
+
+def _digest_tree(path: Path) -> str:
+    """SHA-256 over sorted (relative path, bytes) pairs, caches excluded.
+
+    Mirrors the catalog builder's digest scope so served bytes can be
+    verified against the manifest digests.
+    """
+    hasher = hashlib.sha256()
+    for file in sorted(path.rglob("*")):
+        if not file.is_file():
+            continue
+        if any(part == "__pycache__" for part in file.parts):
+            continue
+        if file.suffix == ".pyc":
+            continue
+        relative = file.relative_to(path).as_posix()
+        hasher.update(relative.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(file.read_bytes())
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
+def _verify_skill_bytes(entry: dict, skill_dir: Path) -> None:
+    """Fail closed when served bytes no longer match the pinned digest."""
+    key = (entry["name"], entry["digest"])
+    if key in _VERIFIED_SKILL_TREES:
+        return
+    actual = _digest_tree(skill_dir)
+    if actual != entry["digest"]:
+        raise RuntimeError(
+            f"skill {entry['name']} bytes do not match the pinned catalog digest"
+        )
+    _VERIFIED_SKILL_TREES[key] = skill_dir
 
 
 def _skill_entry(name: str) -> dict | None:
@@ -73,6 +109,7 @@ def _skill_dir_from_entry(entry: dict) -> Path:
         raise KeyError(entry["name"])
     if skill_dir.parent != root.resolve():
         raise KeyError(entry["name"])
+    _verify_skill_bytes(entry, skill_dir)
     return skill_dir
 
 
@@ -128,11 +165,17 @@ def get_resource(name: str, relative: str) -> dict:
     """Return one non-SKILL.md resource inside a skill directory.
 
     Shared ``doctrine`` documents (referenced from canonical skills via
-    ``../doctrine/...``) are also served under the reserved catalog name
-    ``doctrine``, resolved against the pinned skills root.
+    ``../doctrine/...``) are served under the reserved catalog name
+    ``doctrine``, and source-pinned shared files at the skills root (such as
+    the toolkit README referenced via ``../README.md``) are served under the
+    reserved name ``shared``. ``CONNECTORS.md`` is referenced by upstream
+    skills but does not exist in the pinned producer tree, so retrieval of it
+    fails closed as an unknown resource.
     """
     if name == "doctrine":
         return _get_doctrine_resource(relative)
+    if name == "shared":
+        return _get_shared_resource(relative)
     entry = _skill_entry(name)
     if entry is None:
         raise KeyError(name)
@@ -186,6 +229,25 @@ def _get_doctrine_resource(relative: str) -> dict:
     data = path.read_bytes()
     return {
         "name": "doctrine",
+        "path": relative,
+        "digest": hashlib.sha256(data).hexdigest(),
+        "content_utf8": data.decode("utf-8", errors="strict"),
+    }
+
+
+def _get_shared_resource(relative: str) -> dict:
+    if not _valid_resource_path(relative):
+        raise ValueError("invalid resource path")
+    root = skills_root()
+    allowed = {"README.md"}
+    if relative not in allowed:
+        raise KeyError(relative)
+    path = root / relative
+    if not path.is_file() or path.is_symlink():
+        raise KeyError(relative)
+    data = path.read_bytes()
+    return {
+        "name": "shared",
         "path": relative,
         "digest": hashlib.sha256(data).hexdigest(),
         "content_utf8": data.decode("utf-8", errors="strict"),
