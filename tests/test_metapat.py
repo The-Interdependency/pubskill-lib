@@ -124,6 +124,13 @@ class MetapatAdapterTests(unittest.TestCase):
         finally:
             marker.unlink(missing_ok=True)
 
+    def test_missing_module_bindings_fail_closed(self):
+        with mock.patch.dict(os.environ, self.pin_env):
+            with self.assertRaises(metapat_adapter.MetapatUnavailable):
+                metapat_adapter.classify_recurrence(
+                    {**self._evidence(), "catalog_module_ids": []}
+                )
+
     def test_catalog_identity_exposes_pin_and_digest(self):
         identity = self._catalog_identity()
         self.assertEqual(identity["repository"], "The-Interdependency/metapat")

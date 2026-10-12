@@ -30,8 +30,11 @@ from pubskill_lib.collections import CollectionError, CollectionTimeoutError
 from pubskill_lib.metapat_adapter import MetapatUnavailable
 from pubskill_lib.reaper import enable_child_subreaper
 
-MAX_REQUEST_BYTES = 1024 * 1024
-MCP_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+# Collection outputs are bounded at 8 MiB by the advertised API; JSON
+# re-encoding and envelope fields can exceed that, so request bodies accept
+# up to twice the collection-output bound for HTTP and MCP query round-trips.
+MAX_REQUEST_BYTES = 12 * 1024 * 1024
+MCP_MAX_REQUEST_BYTES = 16 * 1024 * 1024
 BODY_READ_TIMEOUT_SECONDS = 10
 
 _INSPECT_FIELDS = {"repo_url"}

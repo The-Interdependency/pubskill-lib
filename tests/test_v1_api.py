@@ -206,6 +206,34 @@ class CatalogTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     api.v1_get_skill("sym-skill")
 
+    def test_skill_drift_after_first_serve_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root / "skills"
+            skill_dir = skills / "sym-skill"
+            skill_dir.mkdir(parents=True)
+            skill_md = skill_dir / "SKILL.md"
+            skill_md.write_text("---\nname: sym-skill\ndescription: ok\n---\n", encoding="utf-8")
+            catalog_manifest = {
+                "schema": "pubskill-lib.catalog",
+                "version": 1,
+                "producer": {"repository": "The-Interdependency/skill-lib", "commit": "0" * 40},
+                "skill_count": 1,
+                "propagated_set_digest": "0" * 64,
+                "skills": [{
+                    "name": "sym-skill",
+                    "path": "sym-skill/SKILL.md",
+                    "digest": catalog_module._digest_tree(skill_dir),
+                    "source_commit": "0" * 40,
+                }],
+            }
+            (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+                api.v1_get_skill("sym-skill")
+                skill_md.write_text("---\nname: sym-skill\ndescription: replaced\n---\n", encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    api.v1_get_skill("sym-skill")
+
     def test_resource_listing_excludes_installed_reader_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -53,20 +53,22 @@ def list_skills() -> list[dict]:
 
 _SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _RESOURCE_PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
-_VERIFIED_SKILL_TREES: dict[tuple[str, str], Path] = {}
 
 
 def _digest_tree(path: Path) -> str:
-    """SHA-256 over sorted (relative path, bytes) pairs, caches excluded.
+    """SHA-256 over sorted (relative path, bytes) pairs.
 
-    Mirrors the catalog builder's digest scope so served bytes can be
-    verified against the manifest digests.
+    Interpreter caches and installed reader runtimes (``__pycache__``,
+    ``*.pyc``, ``node_modules``) are excluded so verification matches the
+    source-pinned manifest digest in clean checkouts and deployed images.
     """
     hasher = hashlib.sha256()
     for file in sorted(path.rglob("*")):
         if not file.is_file():
             continue
         if any(part == "__pycache__" for part in file.parts):
+            continue
+        if any(part == "node_modules" for part in file.parts):
             continue
         if file.suffix == ".pyc":
             continue
@@ -79,16 +81,16 @@ def _digest_tree(path: Path) -> str:
 
 
 def _verify_skill_bytes(entry: dict, skill_dir: Path) -> None:
-    """Fail closed when served bytes no longer match the pinned digest."""
-    key = (entry["name"], entry["digest"])
-    if key in _VERIFIED_SKILL_TREES:
-        return
+    """Fail closed when served bytes no longer match the pinned digest.
+
+    The tree is revalidated on every serve so a mounted or copied skills root
+    that drifts after its first request cannot keep reporting the old digest.
+    """
     actual = _digest_tree(skill_dir)
     if actual != entry["digest"]:
         raise RuntimeError(
             f"skill {entry['name']} bytes do not match the pinned catalog digest"
         )
-    _VERIFIED_SKILL_TREES[key] = skill_dir
 
 
 def _skill_entry(name: str) -> dict | None:

@@ -27,9 +27,6 @@ from pubskill_lib.packaging_helpers import ignore_skill_runtime  # noqa: E402
 
 
 def _consumer_commit() -> str:
-    override = os.environ.get("PUBSKILL_CONSUMER_COMMIT")
-    if override:
-        return override
     source_identity = ROOT / "src" / "pubskill_lib" / "_build.json"
     if source_identity.is_file():
         try:
@@ -39,6 +36,9 @@ def _consumer_commit() -> str:
                 return commit
         except (OSError, json.JSONDecodeError):
             pass
+    override = os.environ.get("PUBSKILL_CONSUMER_COMMIT")
+    if override:
+        return override
     try:
         status = subprocess.run(
             ["git", "-C", str(ROOT), "status", "--porcelain"],

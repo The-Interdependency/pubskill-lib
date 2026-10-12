@@ -220,6 +220,11 @@ def classify_recurrence(evidence: dict) -> dict:
         )
     if evidence.get("catalog_digest") != current_digest:
         raise MetapatUnavailable("catalog digest mismatch: evidence does not bind the current METAPAT catalog")
+    module_ids = set(evidence.get("catalog_module_ids") or [])
+    if module_ids != set(REQUIRED_MODULE_IDS):
+        raise MetapatUnavailable(
+            "catalog module bindings do not match the advertised required set"
+        )
 
     normalized = dict(evidence)
     for name in ("declared_invariants", "preserved_invariants", "catalog_module_ids", "shared_ancestry", "unresolved"):

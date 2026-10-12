@@ -217,10 +217,32 @@ def _require_str_list(arguments: dict, name: str) -> None:
         raise ValueError(f"{name} must be an array of strings")
 
 
+_TOOL_ARGUMENT_FIELDS: dict[str, set[str]] = {
+    "pubskill_identity": set(),
+    "pubskill_list_skills": set(),
+    "pubskill_get_skill": {"name"},
+    "pubskill_get_resource": {"name", "path"},
+    "pubskill_collect_metadata": {"repo_url", "revision", "require_sources", "require_facts"},
+    "pubskill_query_metadata": {
+        "collection", "repo_url", "revision", "convention", "fact_kind",
+        "standing", "subject_contains", "path_glob", "diagnostic_status",
+        "diagnostics_only", "limit",
+    },
+    "pubskill_resolve_skills": {"query", "limit"},
+    "pubskill_classify_recurrence": {"evidence"},
+}
+
+
 def _validate_arguments(name: str, arguments: dict) -> dict:
     """Validate tool arguments against the published schemas before dispatch."""
     if not isinstance(arguments, dict):
         raise ValueError("tool arguments must be a JSON object")
+    allowed = _TOOL_ARGUMENT_FIELDS.get(name)
+    if allowed is None:
+        raise ValueError(f"unknown tool: {name}")
+    unknown = set(arguments) - allowed
+    if unknown:
+        raise ValueError(f"unexpected argument(s): {', '.join(sorted(unknown))}")
     if name == "pubskill_identity" or name == "pubskill_list_skills":
         if arguments:
             raise ValueError("this tool takes no arguments")
@@ -450,7 +472,7 @@ class McpHandler:
 
     def __call__(self, environ: dict, start_response) -> list[bytes]:
         length = int(environ.get("CONTENT_LENGTH", 0) or 0)
-        if length <= 0 or length > 4 * 1024 * 1024:
+        if length <= 0 or length > 16 * 1024 * 1024:
             start_response("400 Bad Request", [("Content-Type", "application/json")])
             return [b'{"error":"invalid request body"}']
         body = environ["wsgi.input"].read(length)
@@ -535,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
 
         def do_POST(self) -> None:  # noqa: N802
             length = int(self.headers.get("Content-Length", 0) or 0)
-            if length <= 0 or length > 4 * 1024 * 1024:
+            if length <= 0 or length > 16 * 1024 * 1024:
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()

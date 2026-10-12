@@ -150,6 +150,12 @@ class McpJsonRpcTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mcp_server.handle_jsonrpc({"jsonrpc": "2.0", "id": bad_id, "method": "ping"})
 
+    def test_undeclared_tool_arguments_are_rejected(self):
+        with self.assertRaises(ValueError):
+            mcp_server.call_tool("pubskill_get_skill", {"name": "msdmd", "typo": True})
+        with self.assertRaises(ValueError):
+            mcp_server.call_tool("pubskill_collect_metadata", {"repo_url": "https://github.com/o/r", "require_source": "x"})
+
 
 class McpHttpBytesTests(unittest.TestCase):
     ACCEPT = "application/json, text/event-stream"
