@@ -85,6 +85,19 @@ class ServiceBoundaryTests(unittest.TestCase):
                 with self.assertRaises(AcquisitionError):
                     service.run_inspection("https://github.com/owner/repo")
 
+    def test_inspection_rejects_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "link").symlink_to(root / "does-not-matter")
+
+            @contextmanager
+            def fake_acquire(*args, **kwargs):
+                yield SimpleNamespace(path=root, limits={"max_per_file_bytes": 2 * 1024 * 1024})
+
+            with patch.object(service, "acquire_repository", side_effect=fake_acquire):
+                with self.assertRaises(AcquisitionError):
+                    service.run_inspection("https://github.com/owner/repo")
+
     def test_paid_audit_functions_are_removed(self) -> None:
         for name in (
             "audit_pricing",
@@ -191,6 +204,48 @@ class ServiceBoundaryTests(unittest.TestCase):
         connection.close()
         thread.join(timeout=5)
         server.server_close()
+
+    def test_catalog_get_requests_are_bounded(self) -> None:
+        import http.client
+
+        entered = threading.Event()
+        original_identity = service.api.v1_identity
+
+        def slow_identity(*args, **kwargs):
+            entered.set()
+            time.sleep(0.5)
+            return original_identity()
+
+        with patch.object(service, "WORKER_SEMAPHORE", threading.BoundedSemaphore(1)):
+            with patch.object(service.api, "v1_identity", side_effect=slow_identity):
+                server = service.ThreadingHTTPServer(("127.0.0.1", 0), service.Handler)
+                server.daemon_threads = True
+                port = server.server_address[1]
+
+                def serve() -> None:
+                    server.handle_request()
+                    server.handle_request()
+
+                thread = threading.Thread(target=serve, daemon=True)
+                thread.start()
+
+                def get() -> int:
+                    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                    connection.request("GET", "/v1/identity")
+                    response = connection.getresponse()
+                    status = response.status
+                    response.read()
+                    connection.close()
+                    return status
+
+                first = threading.Thread(target=get)
+                first.start()
+                self.assertTrue(entered.wait(timeout=5))
+                second_status = get()
+                first.join(timeout=5)
+                thread.join(timeout=5)
+                server.server_close()
+                self.assertEqual(second_status, 429)
 
     def test_skill_runtime_ignore_excludes_caches(self) -> None:
         from pubskill_lib.packaging_helpers import ignore_skill_runtime

@@ -40,7 +40,7 @@ def reap_process_group(pgid: int) -> None:
         return
     try:
         while True:
-            info = waitid(p_pgid, -pgid, os.WEXITED | os.WNOHANG)
+            info = waitid(p_pgid, pgid, os.WEXITED | os.WNOHANG)
             if info is None or getattr(info, "si_pid", 0) == 0:
                 return
     except (ChildProcessError, OSError):

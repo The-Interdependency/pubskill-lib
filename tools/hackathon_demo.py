@@ -33,17 +33,20 @@ DEFAULT_REPO_URL = "https://github.com/octocat/Hello-World"
 DEFAULT_REVISION = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 
 
-def rpc(url: str, request_id: int, method: str, params: dict | None = None) -> dict:
+def rpc(url: str, request_id: int, method: str, params: dict | None = None, protocol_version: str | None = None) -> dict:
     payload = {"jsonrpc": "2.0", "id": request_id, "method": method}
     if params is not None:
         payload["params"] = params
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    if protocol_version:
+        headers["MCP-Protocol-Version"] = protocol_version
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        },
+        headers=headers,
         method="POST",
     )
     # A permitted collection may spend up to 120s fetching, 60s checking out,
@@ -54,26 +57,29 @@ def rpc(url: str, request_id: int, method: str, params: dict | None = None) -> d
         return json.loads(body) if body.strip() else {}
 
 
-def notify(url: str, method: str, params: dict | None = None) -> None:
+def notify(url: str, method: str, params: dict | None = None, protocol_version: str | None = None) -> None:
     """Send a JSON-RPC notification (no id; the server must not reply)."""
     payload = {"jsonrpc": "2.0", "method": method}
     if params is not None:
         payload["params"] = params
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    if protocol_version:
+        headers["MCP-Protocol-Version"] = protocol_version
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        },
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=420) as response:
         response.read()
 
 
-def tool_call(url: str, request_id: int, name: str, arguments: dict) -> dict:
-    response = rpc(url, request_id, "tools/call", {"name": name, "arguments": arguments})
+def tool_call(url: str, request_id: int, name: str, arguments: dict, protocol_version: str | None = None) -> dict:
+    response = rpc(url, request_id, "tools/call", {"name": name, "arguments": arguments}, protocol_version=protocol_version)
     result = response.get("result", {})
     if result.get("isError"):
         raise RuntimeError(f"{name} failed: {result.get('content', [{}])[0].get('text', '')[:400]}")
@@ -118,27 +124,28 @@ def main(argv: list[str] | None = None) -> int:
             "clientInfo": {"name": "pubskill-hackathon-demo", "version": "1.0"},
         })
         server = initialized["result"]["serverInfo"]
+        negotiated = initialized["result"]["protocolVersion"]
         print(f"pubskill MCP demo — {server['name']} {server['version']} "
-              f"(MCP {initialized['result']['protocolVersion']})", flush=True)
-        notify(args.url, "notifications/initialized")
+              f"(MCP {negotiated})", flush=True)
+        notify(args.url, "notifications/initialized", protocol_version=negotiated)
 
         request_id = 10
         section(1, "pubskill_identity — who is serving")
-        identity = tool_call(args.url, request_id, "pubskill_identity", {}); request_id += 1
+        identity = tool_call(args.url, request_id, "pubskill_identity", {}, protocol_version=negotiated); request_id += 1
         show("producer", f"{identity['identity']['producer']['repository']}@{identity['identity']['producer']['commit'][:12]}")
         show("consumer", f"{identity['identity']['consumer']['repository']}@{identity['identity']['consumer']['commit'][:12]}")
         show("catalog digest", identity["identity"]["catalog"]["catalog_digest"][:16] + "…")
         pause(args.delay, args.interactive)
 
         section(2, "pubskill_list_skills — the canonical catalog")
-        skills = tool_call(args.url, request_id, "pubskill_list_skills", {}); request_id += 1
+        skills = tool_call(args.url, request_id, "pubskill_list_skills", {}, protocol_version=negotiated); request_id += 1
         show("skill_count", skills["skill_count"])
         show("first skills", ", ".join(item["name"] for item in skills["skills"][:6]) + ", …")
         pause(args.delay, args.interactive)
 
         section(3, "pubskill_resolve_skills — candidates, not authority")
         resolved = tool_call(args.url, request_id, "pubskill_resolve_skills",
-                             {"query": "collect repository metadata without executing code"}); request_id += 1
+                             {"query": "collect repository metadata without executing code"}, protocol_version=negotiated); request_id += 1
         show("method", resolved["method"])
         show("authoritative", resolved["authoritative"])
         for item in resolved["candidates"][:3]:
@@ -151,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
             show("repo_url", args.repo_url)
             show("revision", args.revision)
             collected = tool_call(args.url, request_id, "pubskill_collect_metadata",
-                                  {"repo_url": args.repo_url, "revision": args.revision}); request_id += 1
+                                  {"repo_url": args.repo_url, "revision": args.revision}, protocol_version=negotiated); request_id += 1
             receipt = collected["receipt"]["repository"]
             show("resolved_commit", receipt["resolved_commit"])
             show("exact_revision_match", receipt["resolved_commit"] == args.revision)
@@ -164,14 +171,14 @@ def main(argv: list[str] | None = None) -> int:
 
             section(5, "pubskill_query_metadata — read-only filtering")
             queried = tool_call(args.url, request_id, "pubskill_query_metadata",
-                                {"collection": collection, "diagnostics_only": True}); request_id += 1
+                                {"collection": collection, "diagnostics_only": True}, protocol_version=negotiated); request_id += 1
             show("matched_diagnostics", queried["counts"]["matched_diagnostics"])
             show("total_diagnostics", queried["counts"]["total_diagnostics"])
             show("coverage", json.dumps(queried.get("coverage", {}), sort_keys=True)[:200])
             pause(args.delay, args.interactive)
 
         section(6, "pubskill_get_skill — retrieve the selected canonical skill")
-        skill = tool_call(args.url, request_id, "pubskill_get_skill", {"name": "msdmd"}); request_id += 1
+        skill = tool_call(args.url, request_id, "pubskill_get_skill", {"name": "msdmd"}, protocol_version=negotiated); request_id += 1
         show("name", skill["skill"]["name"])
         show("kind", skill["skill"]["kind"])
         show("status", skill["skill"]["status"])
@@ -181,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
 
         section(7, "pubskill_get_resource — one resource byte-exactly")
         resource = tool_call(args.url, request_id, "pubskill_get_resource",
-                             {"name": "msdmd", "path": "parsers/universal.py"}); request_id += 1
+                             {"name": "msdmd", "path": "parsers/universal.py"}, protocol_version=negotiated); request_id += 1
         show("path", resource["resource"]["path"])
         show("digest", resource["resource"]["digest"][:16] + "…")
         show("content", excerpt(resource["resource"]["content_utf8"], 180))

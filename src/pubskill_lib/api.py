@@ -61,7 +61,13 @@ def _is_valid_collection(collection: object) -> bool:
         return False
     if not isinstance(collection.get("source"), dict):
         return False
+    source = collection["source"]
+    for key in ("revision_kind", "revision", "repository"):
+        if not isinstance(source.get(key), str) or not source[key]:
+            return False
     if not isinstance(collection.get("coverage"), dict):
+        return False
+    if not isinstance(collection["coverage"].get("denominator"), dict):
         return False
     for key in ("facts", "declarations", "edges", "diagnostics", "reader_manifests", "reader_runs"):
         value = collection.get(key)
@@ -123,6 +129,10 @@ def v1_get_resource(name: str, relative: str) -> dict:
 def v1_resolve(query: str, limit: int | None = None) -> dict:
     if not isinstance(query, str) or not query.strip():
         raise ValueError("query must be a non-empty string")
+    if len(query) > 1024:
+        raise ValueError("query must be at most 1024 characters")
+    if len(catalog_module._tokens(query)) > 64:
+        raise ValueError("query must contain at most 64 searchable tokens")
     kwargs = {"limit": validate_limit(limit, 10, 50)}
     resolved = catalog_module.resolve_skills(query, **kwargs)
     return response_envelope("skills.resolve", resolved, input_identity={"query": query})

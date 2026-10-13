@@ -221,9 +221,21 @@ def _doctrine_resource_map() -> dict[str, Path]:
     return resources
 
 
+def _verify_doctrine_bytes(doctrine_root: Path) -> None:
+    """Fail closed when the doctrine tree drifts from the pinned digest."""
+    expected = load_catalog().get("doctrine_digest")
+    if not isinstance(expected, str) or not expected:
+        raise RuntimeError("catalog manifest is missing doctrine_digest")
+    actual = _digest_tree(doctrine_root)
+    if actual != expected:
+        raise RuntimeError("doctrine bytes do not match the pinned catalog digest")
+
+
 def _get_doctrine_resource(relative: str) -> dict:
     if not _valid_resource_path(relative):
         raise ValueError("invalid resource path")
+    doctrine_root = skills_root() / "doctrine"
+    _verify_doctrine_bytes(doctrine_root)
     resources = _doctrine_resource_map()
     if relative not in resources:
         raise KeyError(relative)

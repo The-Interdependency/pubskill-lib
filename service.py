@@ -61,7 +61,12 @@ def run_inspection(repo_url: str) -> dict:
     with acquire_repository(repo_url) as acquired:
         per_file_limit = acquired.limits["max_per_file_bytes"]
         for path in acquired.path.rglob("*"):
-            if path.is_symlink() or not path.is_file():
+            if path.is_symlink():
+                raise AcquisitionError(
+                    f"symlinks are not permitted in inspected checkouts: "
+                    f"{path.relative_to(acquired.path)}"
+                )
+            if not path.is_file():
                 continue
             if path.stat().st_size > per_file_limit:
                 raise AcquisitionError(
@@ -164,6 +169,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        if not WORKER_SEMAPHORE.acquire(blocking=False):
+            return self.reply(429, {"error": "too many concurrent operations"})
         try:
             if path == "/v1/identity":
                 return self.reply(200, api.v1_identity())
@@ -187,6 +194,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(404, {"error": str(exc) or "metapat adapter not enabled"})
         except (ValueError, KeyError, RuntimeError) as exc:
             return self.reply(400, {"error": str(exc) or "invalid request"})
+        finally:
+            WORKER_SEMAPHORE.release()
 
     def do_POST(self) -> None:
         parsed = urlsplit(self.path)

@@ -17,39 +17,35 @@ import urllib.error
 import urllib.request
 
 
-def rpc(url: str, request_id: int, method: str, params: dict | None = None) -> dict:
+def rpc(url: str, request_id: int, method: str, params: dict | None = None, protocol_version: str | None = None) -> dict:
     payload = {"jsonrpc": "2.0", "id": request_id, "method": method}
     if params is not None:
         payload["params"] = params
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    if protocol_version:
+        headers["MCP-Protocol-Version"] = protocol_version
     data = json.dumps(payload).encode()
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        },
-        method="POST",
-    )
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(request, timeout=60) as response:
         body = response.read().decode("utf-8")
         return json.loads(body) if body.strip() else {}
 
 
-def notify(url: str, method: str, params: dict | None = None) -> None:
+def notify(url: str, method: str, params: dict | None = None, protocol_version: str | None = None) -> None:
     """Send a JSON-RPC notification (no id; the server must not reply)."""
     payload = {"jsonrpc": "2.0", "method": method}
     if params is not None:
         payload["params"] = params
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        },
-        method="POST",
-    )
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    if protocol_version:
+        headers["MCP-Protocol-Version"] = protocol_version
+    request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
     with urllib.request.urlopen(request, timeout=60) as response:
         response.read()
 
@@ -70,9 +66,10 @@ def main(argv: list[str] | None = None) -> int:
             "clientInfo": {"name": "pubskill-local-client", "version": "0.1.0"},
         })
         show("initialize", initialized)
-        notify(args.url, "notifications/initialized")
+        negotiated = initialized.get("result", {}).get("protocolVersion", "2025-11-25")
+        notify(args.url, "notifications/initialized", protocol_version=negotiated)
 
-        tools = rpc(args.url, 3, "tools/list")
+        tools = rpc(args.url, 3, "tools/list", protocol_version=negotiated)
         show("tools/list", tools)
 
         calls = [
@@ -83,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
             ("pubskill_resolve_skills", {"query": "metadata collection"}),
         ]
         for request_id, (name, arguments) in enumerate(calls, start=4):
-            response = rpc(args.url, request_id, "tools/call", {"name": name, "arguments": arguments})
+            response = rpc(args.url, request_id, "tools/call", {"name": name, "arguments": arguments}, protocol_version=negotiated)
             text = response.get("result", {}).get("content", [{}])[0].get("text", "")
             summary = text[:400] if response.get("result", {}).get("isError") is False else text
             print(f"--- tools/call {name} ---")

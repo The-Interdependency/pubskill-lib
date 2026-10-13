@@ -174,12 +174,39 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             api.v1_get_resource("doctrine", "../skills.json")
 
+    def test_doctrine_drift_fails_catalog_digest_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root / "skills"
+            doctrine_root = skills / "doctrine"
+            doctrine_root.mkdir(parents=True)
+            (doctrine_root / "guide.md").write_text("canonical guidance\n", encoding="utf-8")
+            catalog_manifest = {
+                "schema": "pubskill-lib.catalog",
+                "version": 1,
+                "producer": {"repository": "The-Interdependency/skill-lib", "commit": "0" * 40},
+                "skill_count": 0,
+                "propagated_set_digest": "0" * 64,
+                "doctrine_digest": "f" * 64,
+                "skills": [],
+            }
+            (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+                with self.assertRaises(ValueError):
+                    api.v1_get_resource("doctrine", "guide.md")
+
     def test_shared_readme_resource_is_retrievable(self):
         resource = api.v1_get_resource("shared", "README.md")["resource"]
         self.assertEqual(resource["name"], "shared")
         self.assertRegex(resource["digest"], r"^[0-9a-f]{64}$")
         with self.assertRaises(ValueError):
             api.v1_get_resource("shared", "../catalog.json")
+
+    def test_resolve_rejects_oversized_queries(self):
+        with self.assertRaises(ValueError):
+            api.v1_resolve("x" * 1025)
+        with self.assertRaises(ValueError):
+            api.v1_resolve(" ".join(f"token{i}" for i in range(65)))
 
     def test_modified_skill_bytes_fail_catalog_digest_check(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -432,6 +459,20 @@ class QueryTests(unittest.TestCase):
             api.v1_query(collection={"schema": "the-interdependency.msdmd-collection", "schema_version": "2.0.0", "facts": [None]})
         with self.assertRaises(ValueError):
             api.v1_query(collection={"schema": "the-interdependency.msdmd-collection", "schema_version": "2.0.0", "facts": [], "repo": "x"})
+        with self.assertRaises(ValueError):
+            api.v1_query(collection={
+                "schema": "the-interdependency.msdmd-collection",
+                "schema_version": "2.0.0",
+                "repo": "x",
+                "source": {},
+                "coverage": {"denominator": {"count": 1, "kind": "discovered-files"}},
+                "facts": [],
+                "declarations": [],
+                "edges": [],
+                "diagnostics": [],
+                "reader_manifests": [],
+                "reader_runs": [],
+            })
 
     def test_query_rejects_long_or_malformed_filters(self):
         with tempfile.TemporaryDirectory() as directory:
