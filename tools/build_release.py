@@ -121,6 +121,14 @@ def main() -> None:
                 if member.name.startswith("/") or ".." in Path(member.name).parts or not (member.isfile() or member.isdir()):
                     raise ValueError("unsafe source archive")
             tree.extractall(source, filter="data")
+        # Record the exact source commit inside the artifacts so installed
+        # builds report their consumer identity without a Git checkout.
+        package_dir = source / "src" / "pubskill_lib"
+        package_dir.mkdir(parents=True, exist_ok=True)
+        (package_dir / "_build.json").write_text(
+            json.dumps({"schema": "pubskill-lib.build", "version": 1, "consumer_commit": commit}) + "\n",
+            encoding="utf-8",
+        )
         environment = dict(os.environ, SOURCE_DATE_EPOCH=str(epoch), PYTHONHASHSEED="0")
         environment.pop("PYTHONPATH", None)
         subprocess.run([sys.executable, "-m", "build", "--no-isolation", "--outdir", str(temporary / "dist"), str(source)], check=True, env=environment)

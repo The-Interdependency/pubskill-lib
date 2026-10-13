@@ -15,7 +15,7 @@ VM contract: `HANDOFF.vm.md`
 
 A stranger clones this repository, runs the commands in README.md, and gets a findings file for `examples/neglected-repo`.
 
-That was the `v0.2.0` release gate. `v0.2.0` is already published and immutable; the current source line is `0.2.1`. A VM receipt is not a tag, and an implementation on `main` is not a later published release.
+That was the `v0.2.0` release gate. `v0.2.0` is already published and immutable; the current source line is `0.3.0`. A VM receipt is not a tag, and an implementation on `main` is not a later published release.
 
 ## Current closure
 

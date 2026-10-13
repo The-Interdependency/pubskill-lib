@@ -2,11 +2,11 @@
 
 Public distribution of [skill-lib](https://github.com/The-Interdependency/skill-lib).
 
-Clone this repo when you want a command that inspects a local repository and writes findings. The full catalog, org doctrine, and unfinished skills stay in skill-lib. This repo is the subset a stranger can run.
+Clone this repo when you want a command that inspects a local repository and writes findings. The current source line also carries the complete pinned skill catalog (44 skills) under `.agents/skills/`, propagated from `skill-lib` at the `SOURCE.md` pin; the inspect CLI remains the public runnable contract. Catalog retrieval, hosted MSDMD collection/query, and the MCP adapter are in-progress parity work on a separately versioned source line, not yet a published release.
 
 ## Status
 
-The current source version is `0.2.1`. Published versions and their immutable
+The current source version is `0.3.0`. Published versions and their immutable
 artifacts are listed on [GitHub Releases](https://github.com/The-Interdependency/pubskill-lib/releases); the already-published `v0.2.0` remains immutable.
 
 | Claim | State |
@@ -126,9 +126,9 @@ MPL-2.0, same as skill-lib. Changes to MPL-covered files must be published.
 
 ## Canon
 
-Propagation and verification: [Updating the canonical public slice](docs/skill-source-sync.md).
+Propagation and verification: [Updating the canonical public skill catalog](docs/skill-source-sync.md).
 
-Do not add skills here first. Add them in skill-lib, mark them appropriately, pin the SHA in `SOURCE.md`, then propagate the public slice.
+Do not add skills here first. Add them in skill-lib, pin the SHA in `SOURCE.md`, then propagate the full catalog with `tools/propagate_skills.py` and regenerate `.agents/skills/catalog.json` with `tools/build_catalog.py`.
 
 Source updates preserve the original inode in a private `.examiner-originals-*`
 directory beside the file, recorded under `preserved_sources` in the apply report.
