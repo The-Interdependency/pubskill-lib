@@ -150,6 +150,10 @@ class McpJsonRpcTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mcp_server.handle_jsonrpc({"jsonrpc": "2.0", "id": bad_id, "method": "ping"})
 
+    def test_non_object_params_are_rejected(self):
+        with self.assertRaises(ValueError):
+            mcp_server.handle_jsonrpc({"jsonrpc": "2.0", "id": 9, "method": "tools/list", "params": "invalid"})
+
     def test_undeclared_tool_arguments_are_rejected(self):
         with self.assertRaises(ValueError):
             mcp_server.call_tool("pubskill_get_skill", {"name": "msdmd", "typo": True})

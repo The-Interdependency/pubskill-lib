@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Iterator
 from urllib.parse import urlsplit
 
-from .reaper import reap_process_group
+from .reaper import enable_child_subreaper, reap_process_group
 
 ALLOWED_GIT_HOSTS = {
     "github.com",
@@ -202,6 +202,7 @@ def _run_git_limited(
     crossed, so an oversized fetch or checkout cannot finish materializing
     before rejection and git's helper children cannot outlive the request.
     """
+    enable_child_subreaper()
     popen_kwargs = {}
     if os.name == "posix":
         popen_kwargs["start_new_session"] = True

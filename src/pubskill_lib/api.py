@@ -62,7 +62,7 @@ def _is_valid_collection(collection: object) -> bool:
     if not isinstance(collection.get("source"), dict):
         return False
     source = collection["source"]
-    for key in ("revision_kind", "revision", "repository"):
+    for key in ("revision_kind", "revision", "repository", "snapshot_sha256"):
         if not isinstance(source.get(key), str) or not source[key]:
             return False
     if not isinstance(collection.get("coverage"), dict):
@@ -82,6 +82,15 @@ def validate_optional_str(value: object, name: str) -> str | None:
         return None
     if not isinstance(value, str):
         raise ValueError(f"{name} must be a string")
+    return value
+
+
+def validate_bool(value: object, name: str) -> bool:
+    """Reject non-boolean optional flag values with a client error."""
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
     return value
 
 
@@ -195,6 +204,10 @@ def v1_query(
 ) -> dict:
     """Read-only query over a supplied or freshly collected schema-2 collection."""
     input_identity: dict[str, object] = {}
+    if collection is not None and (repo_url is not None or revision is not None):
+        raise ValueError(
+            "supply either a collection or repo_url/revision, not both"
+        )
     if collection is None:
         if not repo_url:
             raise ValueError("collection or repo_url is required")

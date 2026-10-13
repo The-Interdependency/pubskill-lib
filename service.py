@@ -103,16 +103,25 @@ BODY_READER_SEMAPHORE = threading.BoundedSemaphore(max_body_readers())
 def _read_body_bounded(rfile, length: int, timeout_seconds: int) -> bytes:
     """Read exactly ``length`` bytes under an absolute deadline.
 
-    A socket timeout alone is an inactivity timeout; a slow-loris client can
-    keep it alive with periodic single bytes. The absolute deadline bounds
-    total time spent reading the body.
+    Each blocking read's socket timeout is set to the remaining deadline so a
+    trickling client cannot keep individual reads alive past the total bound.
     """
     deadline = time.monotonic() + timeout_seconds
     chunks: list[bytes] = []
     remaining = length
     while remaining > 0:
-        if time.monotonic() >= deadline:
+        remaining_time = deadline - time.monotonic()
+        if remaining_time <= 0:
             raise TimeoutError("request body timed out")
+        # The caller set a socket timeout before calling; tighten it to the
+        # remaining deadline so every blocking read honors the total bound.
+        sock = getattr(rfile, "raw", None)
+        if sock is not None:
+            sock = getattr(sock, "_sock", sock)
+        else:
+            sock = getattr(rfile, "_sock", None)
+        if sock is not None and hasattr(sock, "settimeout"):
+            sock.settimeout(max(0.05, remaining_time))
         chunk = rfile.read(min(65536, remaining))
         if not chunk:
             raise ConnectionError("request body truncated")
@@ -302,7 +311,7 @@ class Handler(BaseHTTPRequestHandler):
                         subject_contains=api.validate_optional_str(body.get("subject_contains"), "subject_contains"),
                         path_glob=api.validate_optional_str(body.get("path_glob"), "path_glob"),
                         diagnostic_status=api.validate_optional_str(body.get("diagnostic_status"), "diagnostic_status"),
-                        diagnostics_only=bool(body.get("diagnostics_only", False)),
+                        diagnostics_only=api.validate_bool(body.get("diagnostics_only"), "diagnostics_only"),
                         limit=api.validate_limit(body.get("limit"), 200, 1000),
                     ),
                 )

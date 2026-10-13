@@ -22,7 +22,7 @@ from pathlib import Path
 
 from .acquisition import GIT_ISOLATED_ENV
 from .identity import skills_root
-from .reaper import reap_process_group
+from .reaper import enable_child_subreaper, reap_process_group
 
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
 DEFAULT_COLLECT_TIMEOUT_SECONDS = 180
@@ -135,6 +135,7 @@ def _run_collector_capped(
     reader helper processes cannot outlive the request.
     """
     max_bytes = max(1, max_output_chars)  # UTF-8 bytes are >= chars; byte cap is conservative
+    enable_child_subreaper()
     popen_kwargs = {}
     if os.name == "posix":
         popen_kwargs["start_new_session"] = True
@@ -167,7 +168,7 @@ def _run_collector_capped(
             thread.join(timeout=1)
         out_file.seek(0)
         err_file.seek(0)
-        stdout = out_file.read()
+        stdout = out_file.read(max_bytes + 1)
         stderr = err_file.read()
     if exceeded or len(stdout) > max_bytes:
         raise CollectionError(

@@ -347,7 +347,9 @@ def handle_jsonrpc(payload: dict) -> dict | None:
     ):
         raise ValueError("invalid JSON-RPC id")
     is_notification = "id" not in payload
-    params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
+    if "params" in payload and not isinstance(payload["params"], dict):
+        raise ValueError("params must be a JSON object")
+    params = payload.get("params") or {}
 
     def respond(result: dict) -> dict | None:
         if is_notification:
@@ -602,8 +604,16 @@ def main(argv: list[str] | None = None) -> int:
             chunks: list[bytes] = []
             remaining = length
             while remaining > 0:
-                if time.monotonic() >= deadline:
+                remaining_time = deadline - time.monotonic()
+                if remaining_time <= 0:
                     raise TimeoutError("request body timed out")
+                sock = getattr(self.rfile, "raw", None)
+                if sock is not None:
+                    sock = getattr(sock, "_sock", sock)
+                else:
+                    sock = getattr(self.rfile, "_sock", None)
+                if sock is not None and hasattr(sock, "settimeout"):
+                    sock.settimeout(max(0.05, remaining_time))
                 chunk = self.rfile.read(min(65536, remaining))
                 if not chunk:
                     raise ConnectionError("request body truncated")

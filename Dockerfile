@@ -10,8 +10,25 @@ ARG PUBSKILL_CONSUMER_COMMIT=
 ENV PUBSKILL_CONSUMER_COMMIT=$PUBSKILL_CONSUMER_COMMIT
 RUN pip install --no-cache-dir . && pip install --no-cache-dir -r .agents/skills/msdmd/requirements.txt
 # Fail the image build unless the installed package reports a concrete
-# consumer source commit (passed via --build-arg or resolved from .git).
-RUN python -c "import re; from pubskill_lib.identity import consumer_commit; assert re.fullmatch(r'[0-9a-f]{40}', consumer_commit()), consumer_commit()"
+# consumer source commit (resolved from a source-owned _build.json, from the
+# PUBSKILL_CONSUMER_COMMIT build arg, or from .git). When a source-owned
+# identity artifact exists, the installed identity must match it so an
+# arbitrary --build-arg cannot override the actual build context.
+RUN python - <<'PY'
+import json, re, sys
+from pathlib import Path
+from pubskill_lib.identity import consumer_commit
+
+commit = consumer_commit()
+if not re.fullmatch(r"[0-9a-f]{40}", commit):
+    sys.exit(f"installed package has no concrete consumer commit: {commit!r}")
+source_identity = Path("src/pubskill_lib/_build.json")
+if source_identity.is_file():
+    recorded = json.loads(source_identity.read_text(encoding="utf-8"))["consumer_commit"]
+    if recorded != commit:
+        sys.exit(f"installed commit {commit} does not match source identity {recorded}")
+print(f"consumer identity verified: {commit}")
+PY
 RUN npm ci --ignore-scripts --prefix .agents/skills/msdmd
 # The committed normalized fixture is the minimal-runtime receipt; the
 # deployed image installs the full reader runtime, so it replays the separate

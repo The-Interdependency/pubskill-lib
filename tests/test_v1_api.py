@@ -485,6 +485,36 @@ class QueryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 queries.query_collection(collection, subject_contains={})
 
+    def test_query_rejects_collection_and_repository_together(self):
+        with self.assertRaises(ValueError):
+            api.v1_query(collection={"schema": "x"}, repo_url="https://github.com/o/r")
+
+    def test_query_requires_snapshot_sha256_in_source(self):
+        with self.assertRaises(ValueError):
+            api.v1_query(collection={
+                "schema": "the-interdependency.msdmd-collection",
+                "schema_version": "2.0.0",
+                "repo": "x",
+                "source": {
+                    "revision_kind": "content-snapshot",
+                    "revision": "snapshot:abc",
+                    "repository": "fixture/x",
+                },
+                "coverage": {"denominator": {"count": 1, "kind": "discovered-files"}},
+                "facts": [],
+                "declarations": [],
+                "edges": [],
+                "diagnostics": [],
+                "reader_manifests": [],
+                "reader_runs": [],
+            })
+
+    def test_validate_bool_rejects_non_booleans(self):
+        self.assertIs(api.validate_bool(None, "diagnostics_only"), False)
+        self.assertIs(api.validate_bool(True, "diagnostics_only"), True)
+        with self.assertRaises(ValueError):
+            api.validate_bool("false", "diagnostics_only")
+
 
 class AcquisitionBoundaryTests(unittest.TestCase):
     def test_url_validation(self):
