@@ -118,8 +118,16 @@ def query_collection(
             return False
         if fact_kind and item.get("kind") != fact_kind:
             return False
+        if standing and item.get("standing") != standing:
+            return False
         if subject_lower is not None and not _matches(item, subject_lower, "subject"):
             return False
+        if path_glob:
+            path = _source_path(item)
+            if path is None:
+                path = item.get("file")
+            if not isinstance(path, str) or not fnmatch.fnmatchcase(path, path_glob):
+                return False
         return True
 
     def edge_ok(item: dict) -> bool:

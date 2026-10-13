@@ -40,6 +40,23 @@ def skills_root() -> Path:
     )
 
 
+def default_skills_root() -> Path:
+    """Return the immutable packaged/checked-in skills root.
+
+    This is the source-pinned reference catalog: the repo checkout's
+    `.agents/skills` when running from source, otherwise the packaged
+    `pubskill_lib/_skills` copy. `PUBSKILL_SKILLS_ROOT` overrides are
+    validated against this root rather than trusted outright.
+    """
+    checkout = REPO_ROOT / ".agents" / "skills"
+    if checkout.is_dir():
+        return checkout
+    packaged = PACKAGE_ROOT / "_skills"
+    if packaged.is_dir():
+        return packaged
+    return skills_root()
+
+
 def producer_identity() -> dict[str, str]:
     source = json.loads(SOURCE_JSON.read_text(encoding="utf-8"))
     if source.get("schema") != "pubskill-lib.source" or source.get("version") != 1:

@@ -10,7 +10,7 @@ import json
 import re
 from pathlib import Path
 
-from .identity import skills_root
+from .identity import default_skills_root, skills_root
 
 _STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how",
@@ -20,10 +20,39 @@ _STOPWORDS = {
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
+def _manifest_identity(catalog: dict) -> tuple:
+    """Extract the immutable, source-pinned identity of a catalog manifest."""
+    skills = tuple(
+        (item["name"], item.get("digest"), item.get("source_commit"))
+        for item in sorted(catalog.get("skills", []), key=lambda entry: entry["name"])
+    )
+    return (
+        catalog.get("propagated_set_digest"),
+        catalog.get("doctrine_digest"),
+        catalog.get("shared_digest"),
+        catalog.get("skills_json_digest"),
+        skills,
+    )
+
+
 def load_catalog() -> dict:
-    catalog = json.loads((skills_root() / "catalog.json").read_text(encoding="utf-8"))
+    root = skills_root()
+    catalog = json.loads((root / "catalog.json").read_text(encoding="utf-8"))
     if catalog.get("schema") != "pubskill-lib.catalog":
         raise RuntimeError("invalid catalog manifest")
+    # An overridden skills root may carry its own manifest; its source-pinned
+    # identity must match the immutable packaged/checked-in catalog so a
+    # forged SKILL.md plus a regenerated catalog.json cannot pass for the
+    # canonical producer bytes.
+    default_root = default_skills_root()
+    if root.resolve() != default_root.resolve():
+        default_path = default_root / "catalog.json"
+        if default_path.is_file():
+            default_catalog = json.loads(default_path.read_text(encoding="utf-8"))
+            if _manifest_identity(catalog) != _manifest_identity(default_catalog):
+                raise RuntimeError(
+                    "override catalog does not match the immutable packaged catalog"
+                )
     return catalog
 
 
@@ -249,16 +278,32 @@ def _get_doctrine_resource(relative: str) -> dict:
     }
 
 
+def _verify_shared_bytes(shared_root: Path) -> None:
+    """Fail closed when the shared tree drifts from the pinned digest."""
+    expected = load_catalog().get("shared_digest")
+    if not isinstance(expected, str) or not expected:
+        raise RuntimeError("catalog manifest is missing shared_digest")
+    actual = _digest_tree(shared_root)
+    if actual != expected:
+        raise RuntimeError("shared resources do not match the pinned catalog digest")
+
+
 def _get_shared_resource(relative: str) -> dict:
     if not _valid_resource_path(relative):
         raise ValueError("invalid resource path")
     root = skills_root()
-    allowed = {"README.md"}
-    if relative not in allowed:
+    shared_root = root / "shared"
+    _verify_shared_bytes(shared_root)
+    resources = {
+        path.relative_to(shared_root).as_posix(): path
+        for path in shared_root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+        and not any(part == "__pycache__" for part in path.parts)
+        and path.suffix != ".pyc"
+    }
+    if relative not in resources:
         raise KeyError(relative)
-    path = root / relative
-    if not path.is_file() or path.is_symlink():
-        raise KeyError(relative)
+    path = resources[relative]
     data = path.read_bytes()
     return {
         "name": "shared",

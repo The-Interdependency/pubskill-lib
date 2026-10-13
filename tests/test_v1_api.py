@@ -128,7 +128,10 @@ class CatalogTests(unittest.TestCase):
                 }],
             }
             (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+            with (
+                mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}),
+                mock.patch.object(catalog_module, "default_skills_root", return_value=skills),
+            ):
                 self.assertEqual(
                     api.v1_get_resource("sym-skill", "real.txt")["resource"]["content_utf8"],
                     "real",
@@ -160,7 +163,10 @@ class CatalogTests(unittest.TestCase):
                 }],
             }
             (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+            with (
+                mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}),
+                mock.patch.object(catalog_module, "default_skills_root", return_value=skills),
+            ):
                 skill = api.v1_get_skill("sym-skill")["skill"]
                 paths = {item["path"] for item in skill["resources"]}
                 self.assertIn("real.txt", paths)
@@ -191,9 +197,36 @@ class CatalogTests(unittest.TestCase):
                 "skills": [],
             }
             (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+            with (
+                mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}),
+                mock.patch.object(catalog_module, "default_skills_root", return_value=skills),
+            ):
                 with self.assertRaises(ValueError):
                     api.v1_get_resource("doctrine", "guide.md")
+
+    def test_override_manifest_must_match_packaged_catalog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            skills = Path(directory) / "skills"
+            skills.mkdir()
+            (skills / "catalog.json").write_text(json.dumps({
+                "schema": "pubskill-lib.catalog",
+                "version": 1,
+                "producer": {"repository": "The-Interdependency/skill-lib", "commit": "0" * 40},
+                "skill_count": 1,
+                "propagated_set_digest": "0" * 64,
+                "doctrine_digest": "0" * 64,
+                "shared_digest": "0" * 64,
+                "skills_json_digest": "0" * 64,
+                "skills": [{
+                    "name": "forged-skill",
+                    "path": "forged-skill/SKILL.md",
+                    "digest": "f" * 64,
+                    "source_commit": "0" * 40,
+                }],
+            }), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+                with self.assertRaises(RuntimeError):
+                    catalog_module.load_catalog()
 
     def test_shared_readme_resource_is_retrievable(self):
         resource = api.v1_get_resource("shared", "README.md")["resource"]
@@ -229,7 +262,10 @@ class CatalogTests(unittest.TestCase):
                 }],
             }
             (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+            with (
+                mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}),
+                mock.patch.object(catalog_module, "default_skills_root", return_value=skills),
+            ):
                 with self.assertRaises(ValueError):
                     api.v1_get_skill("sym-skill")
 
@@ -255,7 +291,10 @@ class CatalogTests(unittest.TestCase):
                 }],
             }
             (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+            with (
+                mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}),
+                mock.patch.object(catalog_module, "default_skills_root", return_value=skills),
+            ):
                 api.v1_get_skill("sym-skill")
                 skill_md.write_text("---\nname: sym-skill\ndescription: replaced\n---\n", encoding="utf-8")
                 with self.assertRaises(ValueError):
@@ -284,7 +323,10 @@ class CatalogTests(unittest.TestCase):
                 }],
             }
             (skills / "catalog.json").write_text(json.dumps(catalog_manifest), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}):
+            with (
+                mock.patch.dict(os.environ, {"PUBSKILL_SKILLS_ROOT": str(skills)}),
+                mock.patch.object(catalog_module, "default_skills_root", return_value=skills),
+            ):
                 skill = api.v1_get_skill("sym-skill")["skill"]
                 paths = {item["path"] for item in skill["resources"]}
                 self.assertIn("real.txt", paths)
@@ -514,6 +556,21 @@ class QueryTests(unittest.TestCase):
         self.assertIs(api.validate_bool(True, "diagnostics_only"), True)
         with self.assertRaises(ValueError):
             api.validate_bool("false", "diagnostics_only")
+
+    def test_declaration_filters_apply_path_and_standing(self):
+        collection = {
+            "facts": [],
+            "declarations": [
+                {"kind": "CONTRACTS", "standing": "declared", "file": "config.json", "subject": "x"},
+                {"kind": "CONTRACTS", "standing": "observed", "file": "src/example.py", "subject": "y"},
+            ],
+            "edges": [],
+            "diagnostics": [],
+        }
+        by_path = queries.query_collection(collection, path_glob="*.py")
+        self.assertEqual([item["file"] for item in by_path["matched_declarations"]], ["src/example.py"])
+        by_standing = queries.query_collection(collection, standing="declared")
+        self.assertEqual([item["file"] for item in by_standing["matched_declarations"]], ["config.json"])
 
 
 class AcquisitionBoundaryTests(unittest.TestCase):

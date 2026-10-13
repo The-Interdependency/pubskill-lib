@@ -117,7 +117,7 @@ def build_manifest(skills_root: Path = SKILLS_ROOT, source_json: Path = SOURCE_J
 
     # Reject unindexed top-level files/directories so unpinned bytes can
     # never ship inside the propagated catalog.
-    consumer_owned = {"README.md", "skills.json", "catalog.json"}
+    consumer_owned = {"README.md", "skills.json", "catalog.json", "shared"}
     allowed_entries = set(names) | {"doctrine"} | consumer_owned
     top_level = {path.name for path in skills_root.iterdir()}
     stray = sorted(top_level - allowed_entries)
@@ -129,6 +129,7 @@ def build_manifest(skills_root: Path = SKILLS_ROOT, source_json: Path = SOURCE_J
 
     skills_json_digest = sha256_bytes(index_bytes)
     doctrine_digest = digest_tree(skills_root / "doctrine")
+    shared_digest = digest_tree(skills_root / "shared")
     set_hasher = hashlib.sha256()
     for skill in skills:
         set_hasher.update(skill["name"].encode("utf-8"))
@@ -139,6 +140,8 @@ def build_manifest(skills_root: Path = SKILLS_ROOT, source_json: Path = SOURCE_J
     set_hasher.update(b"\0")
     set_hasher.update(doctrine_digest.encode("ascii"))
     set_hasher.update(b"\0")
+    set_hasher.update(shared_digest.encode("ascii"))
+    set_hasher.update(b"\0")
 
     return {
         "schema": "pubskill-lib.catalog",
@@ -147,6 +150,7 @@ def build_manifest(skills_root: Path = SKILLS_ROOT, source_json: Path = SOURCE_J
         "skill_count": len(skills),
         "skills_json_digest": skills_json_digest,
         "doctrine_digest": doctrine_digest,
+        "shared_digest": shared_digest,
         "propagated_set_digest": set_hasher.hexdigest(),
         "skills": skills,
     }

@@ -4,8 +4,9 @@
     "commit": "9867ab33877f2b1f50f8a501cf379aa99360bd52",
     "repository": "The-Interdependency/skill-lib"
   },
-  "propagated_set_digest": "6aff3b842c77cd32beab3c1ecbf74c9d2b0c85b371ae21b5fa407bf4bf5f9f94",
+  "propagated_set_digest": "6812c81992ad3061fb6adceaf699df0b3b8b2649cb278b452764b27569477cb5",
   "schema": "pubskill-lib.catalog",
+  "shared_digest": "9db159894ee2dd61f286bf70b6689754d5de4de101c3f9ba5e52a2a71c09e062",
   "skill_count": 44,
   "skills": [
     {

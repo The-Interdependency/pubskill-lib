@@ -640,6 +640,8 @@ def main(argv: list[str] | None = None) -> int:
             return
 
     class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+        daemon_threads = True
+
         def __init__(self, address, handler):
             super().__init__(address, handler)
             self.worker_semaphore = threading.BoundedSemaphore(
@@ -648,6 +650,34 @@ def main(argv: list[str] | None = None) -> int:
             self.body_reader_semaphore = threading.BoundedSemaphore(
                 int(__import__("os").environ.get("PUBSKILL_MAX_BODY_READERS", "8"))
             )
+            self.connection_semaphore = threading.BoundedSemaphore(
+                int(__import__("os").environ.get("PUBSKILL_MAX_CONNECTIONS", "32"))
+            )
+            self._header_timers: dict[object, threading.Timer] = {}
+
+        def process_request(self, request, client_address):
+            if not self.connection_semaphore.acquire(blocking=False):
+                request.close()
+                return
+            request.settimeout(10)
+            timer = threading.Timer(10, request.close)
+            timer.daemon = True
+            timer.start()
+            self._header_timers[request] = timer
+            try:
+                super().process_request(request, client_address)
+            except Exception:
+                self.shutdown_request(request)
+                self.handle_error(request, client_address)
+
+        def shutdown_request(self, request):
+            timer = self._header_timers.pop(request, None)
+            if timer is not None:
+                timer.cancel()
+            try:
+                super().shutdown_request(request)
+            finally:
+                self.connection_semaphore.release()
 
     BoundedThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
     return 0

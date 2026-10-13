@@ -18,7 +18,13 @@ the container image build; the image installs the MSDMD reader runtimes.
 
 ## Resource limits (enforced by the service)
 
-- request body: 1 MiB (HTTP API), 4 MiB (MCP)
+- request body: 12 MiB (HTTP API), 16 MiB (MCP). The limits are sized to
+  accept the full advertised 8 MiB collection output on the documented
+  collect-then-query round trip, including JSON re-encoding overhead.
+- connections: `PUBSKILL_MAX_CONNECTIONS` (default 32) admitted at accept
+  time; headers must complete within 10 s
+- body readers: `PUBSKILL_MAX_BODY_READERS` (default 8); workers:
+  `PUBSKILL_MAX_WORKERS` (default 4)
 - acquisition: HTTPS allowlist only; no credentials, ports, query strings, or
   fragments; git hooks, credential helpers, LFS smudging and submodules disabled
 - fetch timeout 120 s, checkout timeout 60 s
@@ -29,9 +35,10 @@ the container image build; the image installs the MSDMD reader runtimes.
 ## Health and identity probes
 
 ```bash
-curl -s http://127.0.0.1:PORT/v1/identity | jq '.identity.producer, .identity.consumer, .identity.catalog.catalog_digest'
-curl -s http://127.0.0.1:PORT/v1/skills | jq '.skill_count'      # must be 44
-curl -s -X POST http://127.0.0.1:PORT/mcp \
+PORT="${PORT:-8080}"
+curl -s "http://127.0.0.1:${PORT}/v1/identity" | jq '.identity.producer, .identity.consumer, .identity.catalog.catalog_digest'
+curl -s "http://127.0.0.1:${PORT}/v1/skills" | jq '.skill_count'      # must be 44
+curl -s -X POST "http://127.0.0.1:${PORT}/mcp" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}'
@@ -55,7 +62,7 @@ of the rollback contract and must not change between deployments.
 2. `GET /v1/skills` — 44 skills with the accepted catalog digest.
 3. One bounded fixture collection:
    ```bash
-   curl -s -X POST http://127.0.0.1:PORT/v1/msdmd/collect \
+   curl -s -X POST "http://127.0.0.1:${PORT}/v1/msdmd/collect" \
      -H 'Content-Type: application/json' \
      -d '{"repo_url":"https://github.com/octocat/Hello-World","revision":"<exact-sha>"}'
    ```

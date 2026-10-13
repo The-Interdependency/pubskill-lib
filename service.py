@@ -14,7 +14,7 @@ import os
 import socket
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as _ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -328,6 +328,52 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             print(f"v1 failure: {exc!r}", flush=True)
             return self.reply(500, {"error": "operation failed"})
+
+
+HEADER_READ_TIMEOUT_SECONDS = 10
+MAX_CONNECTIONS = int(os.environ.get("PUBSKILL_MAX_CONNECTIONS", "32"))
+
+
+class ThreadingHTTPServer(_ThreadingHTTPServer):
+    """Threading server with bounded connections and an absolute header deadline.
+
+    ``ThreadingHTTPServer`` would otherwise create an unrestricted thread per
+    accepted socket with no deadline before the first header byte, so a slow
+    client could exhaust threads and file descriptors without acquiring any
+    semaphore. A connection-count semaphore bounds admission, and a timer
+    closes each socket if headers have not completed within the deadline.
+    """
+
+    daemon_threads = True
+
+    def __init__(self, address, handler):
+        super().__init__(address, handler)
+        self.connection_semaphore = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        self._header_timers: dict[object, threading.Timer] = {}
+
+    def process_request(self, request, client_address):
+        if not self.connection_semaphore.acquire(blocking=False):
+            request.close()
+            return
+        request.settimeout(HEADER_READ_TIMEOUT_SECONDS)
+        timer = threading.Timer(HEADER_READ_TIMEOUT_SECONDS, request.close)
+        timer.daemon = True
+        timer.start()
+        self._header_timers[request] = timer
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.shutdown_request(request)
+            self.handle_error(request, client_address)
+
+    def shutdown_request(self, request):
+        timer = self._header_timers.pop(request, None)
+        if timer is not None:
+            timer.cancel()
+        try:
+            super().shutdown_request(request)
+        finally:
+            self.connection_semaphore.release()
 
 
 def main() -> None:
