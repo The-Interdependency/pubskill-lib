@@ -129,6 +129,37 @@ def is_metapat_enabled() -> bool:
     return verified_metapat_root() is not None
 
 
+def _reject_untracked_importables(root: Path) -> None:
+    """Fail closed on importable files Git does not track in the checkout.
+
+    A clean ``git status`` can hide ignored ``.pyc``/extension artifacts that
+    would still be importable from ``src``; only files tracked at the pinned
+    commit may be executed.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--", "src"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        raise MetapatUnavailable("cannot verify METAPAT tracked files") from None
+    if result.returncode != 0:
+        raise MetapatUnavailable("cannot verify METAPAT tracked files")
+    tracked = {
+        value.decode("utf-8") for value in result.stdout.split(b"\0") if value
+    }
+    importable_suffixes = {".py", ".pyc", ".pyo", ".so", ".pyd"}
+    for path in (root / "src").rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if path.suffix in importable_suffixes and relative not in tracked:
+            raise MetapatUnavailable(
+                f"untracked importable file in METAPAT checkout: {relative}"
+            )
+
+
 def _import_metapat():
     root = verified_metapat_root()
     if root is None:
@@ -154,6 +185,8 @@ def _import_metapat():
             raise MetapatUnavailable(
                 f"preloaded {module_name} does not resolve inside the pinned METAPAT checkout"
             )
+    if "metapat.catalog" not in sys.modules:
+        _reject_untracked_importables(root)
     from metapat.catalog import CATALOG_VERSION, canonical_semantic_catalog
     from metapat.structural_recurrence import RecurrenceEvidence, adjudicate_recurrence
 
@@ -178,6 +211,10 @@ def metapat_catalog_identity() -> dict:
     }
 
 
+MAX_EVIDENCE_STRING_LENGTH = 2048
+MAX_EVIDENCE_ARRAY_ITEMS = 256
+
+
 def _validate_evidence_fields(evidence: dict) -> dict:
     if not isinstance(evidence, dict):
         raise ValueError("evidence must be a JSON object")
@@ -193,10 +230,23 @@ def _validate_evidence_fields(evidence: dict) -> dict:
             continue
         if not isinstance(value, str) or not value:
             raise ValueError(f"evidence field {field} must be a non-empty string")
+        if len(value) > MAX_EVIDENCE_STRING_LENGTH:
+            raise ValueError(
+                f"evidence field {field} must be at most {MAX_EVIDENCE_STRING_LENGTH} characters"
+            )
     for field in _EVIDENCE_STRING_ARRAY_FIELDS:
         if field in evidence and evidence[field] is not None:
-            if not isinstance(evidence[field], list) or any(not isinstance(item, str) for item in evidence[field]):
+            value = evidence[field]
+            if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
                 raise ValueError(f"evidence field {field} must be an array of strings")
+            if len(value) > MAX_EVIDENCE_ARRAY_ITEMS:
+                raise ValueError(
+                    f"evidence field {field} must contain at most {MAX_EVIDENCE_ARRAY_ITEMS} items"
+                )
+            if any(len(item) > MAX_EVIDENCE_STRING_LENGTH for item in value):
+                raise ValueError(
+                    f"evidence field {field} items must be at most {MAX_EVIDENCE_STRING_LENGTH} characters"
+                )
     for field in _EVIDENCE_BOOL_FIELDS:
         if field in evidence and evidence[field] is not None and not isinstance(evidence[field], bool):
             raise ValueError(f"evidence field {field} must be a boolean")

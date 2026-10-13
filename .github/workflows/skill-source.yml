@@ -43,6 +43,7 @@ jobs:
             diff -ru "canonical/$name" "consumer/.agents/skills/$name"
           done
           diff -ru canonical/doctrine consumer/.agents/skills/doctrine
+          cmp canonical/README.md consumer/.agents/skills/shared/README.md
           cmp canonical/msdmd/parsers/universal.py consumer/src/pubskill_lib/_msdmd_universal.py
           python consumer/tools/build_catalog.py --out /tmp/pubskill-catalog.json
           cmp /tmp/pubskill-catalog.json consumer/.agents/skills/catalog.json

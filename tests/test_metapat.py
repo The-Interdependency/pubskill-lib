@@ -198,6 +198,28 @@ class MetapatAdapterTests(unittest.TestCase):
                 metapat_adapter.classify_recurrence(
                     {**self._evidence(), "source_domain": None}
                 )
+            with self.assertRaises(ValueError):
+                metapat_adapter.classify_recurrence(
+                    {**self._evidence(), "declared_invariants": ["x"] * 257}
+                )
+            with self.assertRaises(ValueError):
+                metapat_adapter.classify_recurrence(
+                    {**self._evidence(), "declared_invariants": ["x" * 2049]}
+                )
+
+    def test_untracked_importable_files_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src").mkdir(parents=True)
+            (root / "src" / "tracked.py").write_text("x = 1\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.email", "fixture@example.com"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "fixture"], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "src/tracked.py"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"], check=True)
+            (root / "src" / "hidden.pyc").write_bytes(b"ignored")
+            with self.assertRaises(metapat_adapter.MetapatUnavailable):
+                metapat_adapter._reject_untracked_importables(root)
 
     def test_v1_recurrence_envelope(self):
         with mock.patch.dict(os.environ, self.pin_env):

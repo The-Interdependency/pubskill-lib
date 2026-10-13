@@ -655,12 +655,22 @@ def main(argv: list[str] | None = None) -> int:
             )
             self._header_timers: dict[object, threading.Timer] = {}
 
+        def _close_connection(self, request) -> None:
+            try:
+                request.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                request.close()
+            except OSError:
+                pass
+
         def process_request(self, request, client_address):
             if not self.connection_semaphore.acquire(blocking=False):
-                request.close()
+                self._close_connection(request)
                 return
             request.settimeout(10)
-            timer = threading.Timer(10, request.close)
+            timer = threading.Timer(10, self._close_connection, args=(request,))
             timer.daemon = True
             timer.start()
             self._header_timers[request] = timer

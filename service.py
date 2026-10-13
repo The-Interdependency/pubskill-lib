@@ -61,6 +61,8 @@ def run_inspection(repo_url: str) -> dict:
     with acquire_repository(repo_url) as acquired:
         per_file_limit = acquired.limits["max_per_file_bytes"]
         for path in acquired.path.rglob("*"):
+            if any(part == ".git" for part in path.parts):
+                continue
             if path.is_symlink():
                 raise AcquisitionError(
                     f"symlinks are not permitted in inspected checkouts: "
@@ -351,12 +353,22 @@ class ThreadingHTTPServer(_ThreadingHTTPServer):
         self.connection_semaphore = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self._header_timers: dict[object, threading.Timer] = {}
 
+    def _close_connection(self, request) -> None:
+        try:
+            request.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            request.close()
+        except OSError:
+            pass
+
     def process_request(self, request, client_address):
         if not self.connection_semaphore.acquire(blocking=False):
-            request.close()
+            self._close_connection(request)
             return
         request.settimeout(HEADER_READ_TIMEOUT_SECONDS)
-        timer = threading.Timer(HEADER_READ_TIMEOUT_SECONDS, request.close)
+        timer = threading.Timer(HEADER_READ_TIMEOUT_SECONDS, self._close_connection, args=(request,))
         timer.daemon = True
         timer.start()
         self._header_timers[request] = timer

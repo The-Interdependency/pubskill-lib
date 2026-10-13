@@ -20,36 +20,21 @@ _STOPWORDS = {
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
-def _manifest_identity(catalog: dict) -> tuple:
-    """Extract the immutable, source-pinned identity of a catalog manifest."""
-    skills = tuple(
-        (item["name"], item.get("digest"), item.get("source_commit"))
-        for item in sorted(catalog.get("skills", []), key=lambda entry: entry["name"])
-    )
-    return (
-        catalog.get("propagated_set_digest"),
-        catalog.get("doctrine_digest"),
-        catalog.get("shared_digest"),
-        catalog.get("skills_json_digest"),
-        skills,
-    )
-
-
 def load_catalog() -> dict:
     root = skills_root()
     catalog = json.loads((root / "catalog.json").read_text(encoding="utf-8"))
     if catalog.get("schema") != "pubskill-lib.catalog":
         raise RuntimeError("invalid catalog manifest")
-    # An overridden skills root may carry its own manifest; its source-pinned
-    # identity must match the immutable packaged/checked-in catalog so a
-    # forged SKILL.md plus a regenerated catalog.json cannot pass for the
-    # canonical producer bytes.
+    # An overridden skills root may carry its own manifest; it must match the
+    # immutable packaged/checked-in catalog in full so neither forged skill
+    # bytes with a regenerated catalog nor edited listing metadata can pass
+    # for the canonical producer manifest.
     default_root = default_skills_root()
     if root.resolve() != default_root.resolve():
         default_path = default_root / "catalog.json"
         if default_path.is_file():
             default_catalog = json.loads(default_path.read_text(encoding="utf-8"))
-            if _manifest_identity(catalog) != _manifest_identity(default_catalog):
+            if catalog != default_catalog:
                 raise RuntimeError(
                     "override catalog does not match the immutable packaged catalog"
                 )
