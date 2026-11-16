@@ -8,6 +8,7 @@ include docs/llms-source.md
 include docs/derived-copies.json
 graft .agents/skills
 graft examples
+graft templates
 graft tests
 exclude tests/test_service.py
 graft tools
