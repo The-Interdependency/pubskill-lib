@@ -43,7 +43,7 @@ class SkillSourceTests(unittest.TestCase):
     def test_public_slice_does_not_expand_into_org_skills(self):
         self.assertEqual(
             {path.parent.name for path in SKILLS.glob("*/SKILL.md")},
-            {"msdmd", "repo-audit-repair", "manifest", "llms-build", "char-compress"},
+            {"msdmd", "repo-audit-repair", "manifest", "llms-build", "char-compress", "doc-build", "cap-build", "deps-build", "test-build", "github-tests", "ssh-automation", "sql-queries", "statistical-analysis", "explore-data", "validate-data"},
         )
 
     def test_work_graph_is_bound_to_pin(self):

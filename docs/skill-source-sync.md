@@ -4,8 +4,11 @@
 owns its public CLI, fixtures, packaging and hosted integration. Propagation
 transfers source bytes, not implementation authority or behavioral verification.
 
-The public slice is `msdmd`, `repo-audit-repair`, `manifest`, and `llms-build`,
-plus shared doctrine. The packaged `_msdmd_universal.py` must match the vendored
+The exact public slice is `msdmd`, `repo-audit-repair`, `manifest`, `llms-build`,
+`doc-build`, `cap-build`, `deps-build`, `test-build`, `github-tests`,
+`ssh-automation`, `sql-queries`, `statistical-analysis`, `explore-data`, and
+`validate-data`, plus shared doctrine. Imported Apache-2.0 skills also require
+`ATTRIBUTION.md` and `LICENSES/Apache-2.0.txt` at the repo root. The packaged `_msdmd_universal.py` must match the vendored
 canonical parser byte for byte. The `llms-build` stdlib runner is vendored at
 repo-root `llms/__init__.py` and `llms/build.py`. Do not copy skill-lib's own
 `llms/metadata.py`; that file is the producer's publication source. Do not copy
@@ -27,11 +30,14 @@ replays the current publication pin; select a newly verified SHA for a later upd
 ```bash
 PIN=$(python -c 'import json; print(json.load(open("src/pubskill_lib/_source.json"))["commit"])')
 git -C ../skill-lib checkout --detach "$PIN"
-python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair manifest llms-build
-python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair manifest llms-build --apply
+python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair manifest llms-build doc-build cap-build deps-build test-build github-tests ssh-automation sql-queries statistical-analysis explore-data validate-data
+python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair manifest llms-build doc-build cap-build deps-build test-build github-tests ssh-automation sql-queries statistical-analysis explore-data validate-data --apply
+# Restore the derived-copy section in .agents/skills/README.md; do not propagate char-compress.
 cp ../skill-lib/msdmd/parsers/universal.py src/pubskill_lib/_msdmd_universal.py
 cp ../skill-lib/llms/__init__.py llms/__init__.py
 cp ../skill-lib/llms/build.py llms/build.py
+cp ../skill-lib/ATTRIBUTION.md ATTRIBUTION.md
+cp ../skill-lib/LICENSES/Apache-2.0.txt LICENSES/Apache-2.0.txt
 ```
 
 In the same commit, update `SOURCE.md` (SHA and source commit date),
@@ -57,8 +63,8 @@ python .agents/skills/char-compress/char_compress_check.py
 ```
 
 The `canonical-source` CI job checks out its explicit trusted producer pin,
-rejects publication metadata that differs, and compares the complete skill trees,
-shared doctrine, the packaged parser, and the portable `llms` runner files. It
+rejects publication metadata that differs, and compares the complete exact skill trees,
+shared doctrine, the packaged parser, the portable `llms` runner files, and the imported-skill attribution files. It
 then checks each declared derived copy against its recorded source and consumer
 hashes. It
 does not rewrite source before checking it. Existing CI separately exercises
