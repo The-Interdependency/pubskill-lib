@@ -1,0 +1,57 @@
+{
+  "schema": "pubskill-lib.derived-copies",
+  "version": 1,
+  "note": "Public copies that are not byte-identical to the pinned producer. source_sha256 binds the reviewed producer bytes at source_commit; consumer_sha256 binds the published bytes. A pin move that changes any source file must re-review the redaction and update both hashes. Files marked exact must also be byte-identical.",
+  "source_repository": "The-Interdependency/skill-lib",
+  "source_commit": "3001c1a70c1c9d5a063325193ed4ee6db73cd765",
+  "copies": [
+    {
+      "name": "char-compress",
+      "relation": "redacted",
+      "approval": "Owner-approved public-core split; pull-request review and owner merge.",
+      "files": [
+        {
+          "source": "char-compress/SKILL.md",
+          "consumer": ".agents/skills/char-compress/SKILL.md",
+          "relation": "redacted",
+          "source_sha256": "4043e8c527eb887aa614be8d5e34c2589beef16e53770f5fc26f430e8c69524b",
+          "consumer_sha256": "65e0c9ebfab9e789ad99b0e2cc42ddcfac36a11c73c823afd7a852e9a139eaaa"
+        },
+        {
+          "source": "char-compress/fixtures.json",
+          "consumer": ".agents/skills/char-compress/fixtures.json",
+          "relation": "redacted",
+          "source_sha256": "20ac24f517ad4224a2e82dda48bba42a4d5ee9a0ab24f234fde1571a11a894bd",
+          "consumer_sha256": "726053005fa25c31b601896fbf56d5a69e3780b38de4ac8095f713c9fbc205c8"
+        },
+        {
+          "source": "tools/char_compress_check.py",
+          "consumer": ".agents/skills/char-compress/char_compress_check.py",
+          "relation": "exact",
+          "source_sha256": "1efb9607215768daec7c8df937f04ed0ba3bc874be3031f0435b52c793dbb11a",
+          "consumer_sha256": "1efb9607215768daec7c8df937f04ed0ba3bc874be3031f0435b52c793dbb11a"
+        }
+      ],
+      "removed": [
+        "SKILL.md: section 'Repository placement' with subsections 'Relation to `ucns`' and 'Relation to `edcmbone`' (org placement and org-project relations)",
+        "SKILL.md: section 'Optional local text-stack notation'",
+        "SKILL.md: frontmatter description wording naming the org catalog, UCNS, active language-construction authority and edcmbone",
+        "SKILL.md: intro sentences naming the org catalog and UCNS",
+        "SKILL.md: Compression procedure sentences in steps 2, 3 and 7 that referred to the removed optional notation",
+        "SKILL.md: Output shape 'Include text_stack' sentence, 'ucns_relation' and 'local_notation' fields, and the 'Optional historical extension' block",
+        "SKILL.md: Completion criteria clause 'or its optional historical notation' and the paragraph on the historical text-stack selection",
+        "SKILL.md: Anti-pattern bullet about edcmbone metric status",
+        "SKILL.md: hmmm bullet about the historical text-stack source"
+      ],
+      "replaced": [
+        "SKILL.md: 'UCNS compression engine' wording in the intro, Executable support and Anti-patterns now reads as a plain compression engine",
+        "SKILL.md: Executable support paths point at .agents/skills/char-compress/",
+        "fixtures.json: org names, org repository and org file names in example sentences replaced with neutral examples; fixture no_ucns_transfer renamed no_theorem_transfer with neutral text and forbidden strings"
+      ],
+      "hmmm": [
+        "Kept text still uses 'carrier', 'twist seams' and 'recurrence layers' without the removed notation that defined them.",
+        "The upstream char-compress has no field marking it general; this public core exists by owner ruling, not by a producer declaration."
+      ]
+    }
+  ]
+}
