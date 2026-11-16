@@ -13,6 +13,19 @@ Canon: https://github.com/The-Interdependency/skill-lib
 
 The `llms-build` runner is vendored at repo-root `llms/__init__.py` and `llms/build.py` so `python -m llms.build` works. skill-lib's own `llms/metadata.py` is not copied; that file is the producer's publication source, not part of the portable runner.
 
+## Declared derived copies
+
+`char-compress` is a public core of skill-lib's `char-compress`, not an exact copy.
+By owner ruling, the public copy omits org placement, the org-project relation
+sections, and the optional local text-stack notation, and its fixture examples
+use neutral names. The checker `char_compress_check.py` is byte-identical.
+`docs/derived-copies.json` records the source path, source SHA-256 and consumer
+SHA-256 of every file, plus the removed and replaced sections. The
+`canonical-source` CI job fails if a recorded source hash differs from the
+trusted producer checkout, if published bytes differ from the record, or if the
+skill directory holds an unrecorded file. A pin move that changes any recorded
+source file needs a fresh redaction review and both hashes updated.
+
 Update this file in the same commit that propagates vendored skills.
 
 Do not vendor from unpinned `main`.

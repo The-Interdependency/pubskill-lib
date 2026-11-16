@@ -14,3 +14,7 @@ Skills refreshed from the source commit above:
 - `repo-audit-repair/`
 - `manifest/`
 - `llms-build/`
+
+Declared derived (redacted) copies, recorded in `docs/derived-copies.json`:
+
+- `char-compress/` — public core; not byte-identical to the source commit above

@@ -21,6 +21,7 @@ then regenerate root `llms.txt`. Do not hand-edit the generated file.
 #     - The inspect and examiner CLIs live in src/pubskill_lib. The wheel's inspector and Examiner interfaces remain the public package contract.
 #     - The llms-build stdlib runner lives at repo-root llms/ so `python -m llms.build` works. skill-lib's own llms/metadata.py is not shipped.
 #     - examples/neglected-repo is the release-gate fixture for the inspect CLI.
+#     - char-compress is a declared redacted public core, not a byte-identical copy; docs/derived-copies.json records its source and consumer hashes and the removed sections.
 #
 # id: usage_rules
 #   content: - Read README.md, AGENTS.md, and SOURCE.md before changing this repository.

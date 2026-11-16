@@ -12,6 +12,12 @@ repo-root `llms/__init__.py` and `llms/build.py`. Do not copy skill-lib's own
 organization-only skills or reinterpret schema-1 findings as native schema-2
 collections.
 
+`char-compress` is a declared derived copy, not part of the exact slice. Do not
+propagate it with `propagate_skills.py`. On a pin move, compare the recorded
+source files with `docs/derived-copies.json`. If any source hash changed, review
+the upstream change, reapply the recorded redaction by hand, and update both
+hashes and the record's `source_commit` in the same commit.
+
 ## Reproduce propagation
 
 Resolve and validate an exact merged skill-lib commit first. With clean adjacent
@@ -47,11 +53,14 @@ python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
 python .agents/skills/manifest/generate.py --root . --check
 python -m llms.build --root . --out llms.txt --check
+python .agents/skills/char-compress/char_compress_check.py
 ```
 
 The `canonical-source` CI job checks out its explicit trusted producer pin,
 rejects publication metadata that differs, and compares the complete skill trees,
 shared doctrine, the packaged parser, and the portable `llms` runner files. It
+then checks each declared derived copy against its recorded source and consumer
+hashes. It
 does not rewrite source before checking it. Existing CI separately exercises
 Python 3.11/3.12, clean-wheel behavior, reproducible release archives and
 source-distribution replay. New regression tests exercise the actual vendored

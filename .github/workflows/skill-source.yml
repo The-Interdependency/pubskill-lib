@@ -39,3 +39,32 @@ jobs:
           cmp canonical/llms/__init__.py consumer/llms/__init__.py
           cmp canonical/llms/build.py consumer/llms/build.py
           git -C consumer diff --exit-code
+      # Declared derived copies are not byte-identical by design. Bind them to the
+      # trusted producer bytes and the reviewed consumer bytes instead.
+      - name: Verify declared derived copies
+        run: |
+          python - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path
+          sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+          record = json.loads(Path('consumer/docs/derived-copies.json').read_text())
+          assert record['schema'] == 'pubskill-lib.derived-copies' and record['version'] == 1
+          assert record['source_repository'] == 'The-Interdependency/skill-lib'
+          actual = subprocess.check_output(['git', '-C', 'canonical', 'rev-parse', 'HEAD'], text=True).strip()
+          assert record['source_commit'] == actual, 'derived-copy record differs from trusted producer checkout'
+          for copy in record['copies']:
+              consumers = set()
+              for item in copy['files']:
+                  source = Path('canonical') / item['source']
+                  consumer = Path('consumer') / item['consumer']
+                  assert sha(source) == item['source_sha256'], f"producer drift: {item['source']}"
+                  assert sha(consumer) == item['consumer_sha256'], f"unrecorded consumer edit: {item['consumer']}"
+                  if item['relation'] == 'exact':
+                      assert source.read_bytes() == consumer.read_bytes(), item['consumer']
+                  else:
+                      assert item['relation'] == 'redacted', item['relation']
+                  consumers.add(item['consumer'])
+              skill_dir = Path('consumer/.agents/skills') / copy['name']
+              present = {str(path.relative_to('consumer')) for path in skill_dir.rglob('*') if path.is_file() and '__pycache__' not in path.parts}
+              assert present == consumers, f"unrecorded files in {copy['name']}: {sorted(present ^ consumers)}"
+          PY

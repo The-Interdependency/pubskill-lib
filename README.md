@@ -138,12 +138,14 @@ The public slice is pinned in `SOURCE.md` and lives under `.agents/skills/`:
 - `repo-audit-repair` (contract)
 - `manifest` — living-spec generator for the facts block in `CLAUDE.md`
 - `llms-build` — root `llms.txt` publisher from `LLMS` blocks
+- `char-compress` — character-based context compression for agent handoff and skill writing, with a fixture checker. This is a declared redacted public core, not a byte-identical copy; see `docs/derived-copies.json`.
 
 The `llms-build` runner is at repo-root `llms/`, so `python -m llms.build` works as in skill-lib. skill-lib's own `llms/metadata.py` is not shipped here.
 
 ```bash
 python .agents/skills/manifest/generate.py --root . --check
 python -m llms.build --root . --out llms.txt --check
+python .agents/skills/char-compress/char_compress_check.py
 ```
 
 `llms.build --check` titles the generated file with the checkout directory name. In CI that directory is `pubskill-lib`.

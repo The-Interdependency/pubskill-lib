@@ -5,6 +5,7 @@ include CLAUDE.md llms.txt
 include docs/skill-source-sync.md
 include docs/work-graphs/skill-source-sync.json
 include docs/llms-source.md
+include docs/derived-copies.json
 graft .agents/skills
 graft examples
 graft tests
