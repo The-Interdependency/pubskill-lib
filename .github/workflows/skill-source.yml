@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: The-Interdependency/skill-lib
-          ref: 9867ab33877f2b1f50f8a501cf379aa99360bd52
+          ref: 3001c1a70c1c9d5a063325193ed4ee6db73cd765
           path: canonical
           persist-credentials: false
       - name: Verify publication identity and complete public slice
@@ -32,6 +32,10 @@ jobs:
           PY
           diff -ru canonical/msdmd consumer/.agents/skills/msdmd
           diff -ru canonical/repo-audit-repair consumer/.agents/skills/repo-audit-repair
+          diff -ru canonical/manifest consumer/.agents/skills/manifest
+          diff -ru canonical/llms-build consumer/.agents/skills/llms-build
           cmp canonical/doctrine/msdmd-checks.md consumer/.agents/skills/doctrine/msdmd-checks.md
           cmp canonical/msdmd/parsers/universal.py consumer/src/pubskill_lib/_msdmd_universal.py
+          cmp canonical/llms/__init__.py consumer/llms/__init__.py
+          cmp canonical/llms/build.py consumer/llms/build.py
           git -C consumer diff --exit-code
