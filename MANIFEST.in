@@ -3,6 +3,7 @@ include .gitignore
 include requirements-build.txt
 graft .agents/skills
 graft examples
+graft templates
 graft tests
 exclude tests/test_service.py
 graft tools

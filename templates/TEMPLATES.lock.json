@@ -1,0 +1,10 @@
+{
+  "schema": "pubskill-lib.templates-lock",
+  "version": 1,
+  "templates": {
+    "example-skill": {
+      "template_sha256": "ffda6ce9171483332497564e153d1186cd96b5f1a2b5af1ed4f2e7357211f2d8",
+      "example_output_sha256": "8e5c9015703b46d98e5d0aa05086ed52a98558a71c0209052ebb0a9cc67387a7"
+    }
+  }
+}

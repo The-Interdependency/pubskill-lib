@@ -1,0 +1,31 @@
+{
+  "schema": "pubskill-lib.leak-denylist",
+  "version": 1,
+  "note": "Org-specific strings that must never appear in a template. Matching is case-insensitive. token: not preceded or followed by a letter or digit. substring: anywhere. See templates/README.md for the rationale and exclusions.",
+  "entries": [
+    {"term": "interdependency", "match": "substring", "why": "org name"},
+    {"term": "interdependent-lib", "match": "token", "why": "org repo"},
+    {"term": "erin", "match": "token", "why": "owner name"},
+    {"term": "hovel", "match": "substring", "why": "owner handle and email; covers erinepshovel"},
+    {"term": "ucns", "match": "substring", "why": "org project; covers ucns, a0ucns, eml_ucns"},
+    {"term": "a0", "match": "token", "why": "org project; covers a0, a0-cli, a0-betatest, odysseus-a0"},
+    {"term": "a0replite", "match": "token", "why": "org repo"},
+    {"term": "edcm", "match": "substring", "why": "org repo; covers edcmbone"},
+    {"term": "skill-lib", "match": "token", "why": "org catalog repo; token mode does not match pubskill-lib"},
+    {"term": "uchc", "match": "token", "why": "org repo"},
+    {"term": "metapat", "match": "token", "why": "org repo"},
+    {"term": "epac", "match": "token", "why": "org repo"},
+    {"term": "ptcna", "match": "token", "why": "org repo"},
+    {"term": "tiwcg", "match": "token", "why": "org repo"},
+    {"term": "ai-tiw", "match": "token", "why": "org repo"},
+    {"term": "twic", "match": "token", "why": "org agent name"},
+    {"term": "pcea", "match": "token", "why": "org repo"},
+    {"term": "pcna", "match": "token", "why": "org repo"},
+    {"term": "pcsa", "match": "token", "why": "org repo"},
+    {"term": "pcta", "match": "token", "why": "org repo"},
+    {"term": "aimmh", "match": "token", "why": "org repo"},
+    {"term": "zfae", "match": "token", "why": "org repo"},
+    {"term": "txtsprl", "match": "token", "why": "org repo"},
+    {"term": "observer-patch-holography", "match": "token", "why": "org repo"}
+  ]
+}

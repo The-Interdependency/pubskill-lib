@@ -27,7 +27,7 @@ Otherwise:
 ## Binding rules
 
 1. Do not invent a second msdmd, a second findings schema, or a second audit doctrine.
-2. Do not copy org-only skills into this tree (canon, the-interdependency, meta, loop-eng, ucns-option-selection, visitor-intro, and anything marked org-only).
+2. Org-only skills (canon, the-interdependency, meta, loop-eng, ucns-option-selection, visitor-intro, and anything marked org-only) ship only as templates under `templates/<name>/`, never as copies under `.agents/skills/`. Templates are not part of the installed tree. The only way to make a usable copy is `python -m pubskill_lib.fill`, which writes a consumer copy from the template plus the consumer's config file. It exits non-zero and writes nothing when any field is missing, empty, or unknown, and it never writes a guessed value. Every template must pass `python -m pubskill_lib.fill --verify` (schema, lock hashes, example output, leak gate). See `templates/README.md`.
 3. Do not put cosmology on the first screen of README.md.
 4. Do not stamp `verified` unless a gate was actually re-run.
 5. Unresolved work stays `hmmm`. Do not write success prose over missing runners.
