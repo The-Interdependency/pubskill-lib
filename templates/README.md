@@ -25,9 +25,11 @@ Template files end in `.tmpl` so no loader mistakes them for a `SKILL.md`.
 
 `template.json` declares `schema: "pubskill-lib.template"`, `version: 1`,
 `name` (the directory name), and `fields`. Each field has a `description` and
-`required: true|false`. An optional field must declare a non-empty `default`.
-That default is written, reviewed text, not a guess. A required field has no
-default.
+`required: true|false`. An optional field must declare a non-empty, single-line
+`default` without placeholder syntax. That default is written, reviewed text, not
+a guess. A required field has no default. When several templates declare the same
+field, their `required` and `default` must agree; `all` and `--verify` reject a
+conflict.
 
 ## Placeholders
 
@@ -54,9 +56,10 @@ python -m pubskill_lib.fill --verify [--templates DIR]
 Exit codes: `0` ok, `1` drift (`--check`) or failed `--verify`, `2` refusal or
 usage error. Output goes to `DIR/NAME/` along with `FILLED_FROM.json`, which
 records the template name and `template_sha256`. Identical existing output is a
-no-op. Different existing output is refused unless `--force` is passed. With
-`all`, every target is checked before anything is written. Symlinked outputs
-are always refused.
+no-op. Different existing output is refused unless `--force` is passed. Every
+target is checked before anything is written, including under `--force`.
+Symlinked or non-directory targets and paths that escape `--out` are always
+refused. `--force` only waives the content-difference refusal.
 
 `--templates` defaults to this repository's `templates/` when the package runs
 from a source checkout. An installed wheel does not include templates, so pass

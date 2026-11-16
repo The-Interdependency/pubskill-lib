@@ -33,8 +33,8 @@ class FillTests(unittest.TestCase):
         path.write_text(json.dumps(data) if suffix == ".json" else data)
         return path
 
-    def templates_copy(self):
-        root = self.tmp / "templates"
+    def templates_copy(self, name="templates"):
+        root = self.tmp / name
         shutil.copytree(TEMPLATES, root)
         return root
 
@@ -141,6 +141,76 @@ class FillTests(unittest.TestCase):
         self.assertNotEqual(target.read_text(), "local edit\n")
         self.assertEqual(run(*args, "--check").returncode, 0)
 
+
+    def second_template(self, root, required_contact):
+        other = root / "other-skill"
+        shutil.copytree(root / "example-skill", other)
+        spec = json.loads((other / "template.json").read_text())
+        spec["name"] = "other-skill"
+        contact = {"description": "Who decides when the skill hits an unknown", "required": required_contact}
+        if not required_contact:
+            contact["default"] = "a different default"
+        spec["fields"]["escalation_contact"] = contact
+        (other / "template.json").write_text(json.dumps(spec))
+        return other
+
+    def test_all_rejects_conflicting_shared_field_declarations(self):
+        root = self.templates_copy()
+        self.second_template(root, required_contact=True)
+        out = self.tmp / "out"
+        result = run("all", "--config", str(EXAMPLE), "--out", str(out), "--templates", str(root))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("conflicting declarations for field escalation_contact", result.stderr)
+        self.assertFalse(out.exists())
+        self.assertTrue(any("conflicting declarations" in p for p in fill.verify(root)))
+
+    def test_all_rejects_conflicting_shared_defaults(self):
+        root = self.templates_copy()
+        self.second_template(root, required_contact=False)
+        out = self.tmp / "out"
+        result = run("all", "--config", str(EXAMPLE), "--out", str(out), "--templates", str(root))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("conflicting declarations for field escalation_contact", result.stderr)
+        self.assertFalse(out.exists())
+
+    def test_defaults_cannot_carry_placeholder_syntax(self):
+        for index, default in enumerate(("{{pubskill:org_name}}", "{{pubskill: broken", "two\nlines", 7)):
+            with self.subTest(default=default):
+                root = self.templates_copy(f"templates-{index}")
+                spec_path = root / "example-skill" / "template.json"
+                spec = json.loads(spec_path.read_text())
+                spec["fields"]["escalation_contact"]["default"] = default
+                spec_path.write_text(json.dumps(spec))
+                with self.assertRaises(fill.FillError) as caught:
+                    fill.load_template(root, "example-skill")
+                self.assertIn("escalation_contact", "\n".join(caught.exception.problems))
+                self.assertTrue(any("escalation_contact" in p for p in fill.verify(root)))
+
+    def test_force_preflights_every_target_before_writing(self):
+        root = self.templates_copy()
+        self.second_template(root, required_contact=False)
+        spec_path = root / "other-skill" / "template.json"
+        spec = json.loads(spec_path.read_text())
+        spec["fields"]["escalation_contact"]["default"] = "the repository maintainers"
+        spec_path.write_text(json.dumps(spec))
+        decoy = self.tmp / "decoy"
+        decoy.mkdir()
+        for kind in ("file", "symlink"):
+            with self.subTest(kind=kind):
+                out = self.tmp / f"out-{kind}"
+                args = ("all", "--config", str(EXAMPLE), "--out", str(out), "--templates", str(root))
+                self.assertEqual(run(*args).returncode, 0)
+                first = out / "example-skill" / "SKILL.md"
+                first.write_text("local edit\n")
+                shutil.rmtree(out / "other-skill")
+                if kind == "file":
+                    (out / "other-skill").write_text("not a directory\n")
+                else:
+                    (out / "other-skill").symlink_to(decoy, target_is_directory=True)
+                result = run(*args, "--force")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(first.read_text(), "local edit\n")
+                self.assertEqual(list(decoy.iterdir()), [])
 
 if __name__ == "__main__":
     unittest.main()

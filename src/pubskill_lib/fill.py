@@ -108,6 +108,8 @@ def load_template(root: Path, name: str) -> dict:
             default = meta.get("default")
             if not isinstance(default, str) or not default.strip() or CONTROL.search(default):
                 problems.append(f"{name}: optional field {field} must declare a non-empty single-line default")
+            elif PLACEHOLDER_OPEN in default:
+                problems.append(f"{name}: default for field {field} must not contain placeholder syntax")
     files_dir = tdir / "files"
     sources = {}
     if not files_dir.is_dir():
@@ -173,7 +175,15 @@ def resolve_values(templates: list[dict], config: dict) -> dict:
     declared = {}
     for template in templates:
         for field, meta in template["fields"].items():
-            declared.setdefault(field, meta)
+            if field not in declared:
+                declared[field] = meta
+            elif (meta["required"], meta.get("default")) != (declared[field]["required"], declared[field].get("default")):
+                problems.append(
+                    f"conflicting declarations for field {field} across templates "
+                    f"(required/default differ in {template['name']}); fill them separately"
+                )
+    if problems:
+        raise FillError(problems)
     for key in sorted(config):
         if key not in declared:
             problems.append(f"unused config key: {key}")
@@ -228,6 +238,10 @@ def template_sha256(tdir: Path) -> str:
 
 
 def _existing(target: Path) -> dict[str, bytes] | None:
+    if target.parent.is_symlink() or (target.parent.exists() and not target.parent.is_dir()):
+        raise FillError([f"output directory must be a real directory: {target.parent}"])
+    if target.parent.exists() and target.resolve().parent != target.parent.resolve():
+        raise FillError([f"output path escapes the output directory: {target}"])
     if target.is_symlink():
         raise FillError([f"refusing symlinked output: {target}"])
     if not target.exists():
@@ -309,18 +323,20 @@ def verify(root: Path) -> list[str]:
         problems.append(f"{LOCK_FILE} must declare schema {LOCK_SCHEMA} version 1")
     locked = lock.get("templates", {})
     names = list_templates(root)
+    loaded = []
     for name in sorted(set(locked) - set(names)):
         problems.append(f"{LOCK_FILE} lists missing template {name}")
     for name in names:
-        if name not in locked:
-            problems.append(f"{name}: not recorded in {LOCK_FILE}")
-            continue
         try:
             template = load_template(root, name)
         except FillError as exc:
             problems.extend(exc.problems)
             continue
+        loaded.append(template)
         problems.extend(leak_scan(root, name))
+        if name not in locked:
+            problems.append(f"{name}: not recorded in {LOCK_FILE}")
+            continue
         actual = template_sha256(template["dir"])
         if locked[name].get("template_sha256") != actual:
             problems.append(f"{name}: template_sha256 drift (computed {actual})")
@@ -336,6 +352,10 @@ def verify(root: Path) -> list[str]:
         out_hash = _digest(output)
         if locked[name].get("example_output_sha256") != out_hash:
             problems.append(f"{name}: example_output_sha256 drift (computed {out_hash})")
+    try:
+        resolve_values(loaded, {})
+    except FillError as exc:
+        problems.extend(p for p in exc.problems if p.startswith("conflicting declarations"))
     return problems
 
 
@@ -382,14 +402,19 @@ def main(argv: list[str] | None = None) -> int:
             raise FillError(problems)
         values = resolve_values(templates, load_config(args.config))
         rendered = {t["name"]: render(t, values) for t in templates}
-        if not args.check and not args.force:
-            refusals = []
-            for name, files in rendered.items():
+        # Path-safety preflight for every target before any write, even with --force.
+        # --force only waives the content-difference refusal.
+        refusals = []
+        for name, files in rendered.items():
+            try:
                 current = _existing(args.out / name)
-                if current is not None and drift(files, current):
-                    refusals.append(f"{args.out / name} already holds different content; pass --force to replace")
-            if refusals:
-                raise FillError(refusals)
+            except FillError as exc:
+                refusals.extend(exc.problems)
+                continue
+            if not args.check and not args.force and current is not None and drift(files, current):
+                refusals.append(f"{args.out / name} already holds different content; pass --force to replace")
+        if refusals:
+            raise FillError(refusals)
         status = 0
         for name, files in rendered.items():
             target = args.out / name
