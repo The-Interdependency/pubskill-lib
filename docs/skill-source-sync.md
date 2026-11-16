@@ -4,10 +4,19 @@
 owns its public CLI, fixtures, packaging and hosted integration. Propagation
 transfers source bytes, not implementation authority or behavioral verification.
 
-The public slice stays `msdmd` and `repo-audit-repair`, plus their shared doctrine.
-The packaged `_msdmd_universal.py` must match the vendored canonical parser byte
-for byte. Do not copy organization-only skills or reinterpret schema-1 findings
-as native schema-2 collections.
+The public slice is `msdmd`, `repo-audit-repair`, `manifest`, and `llms-build`,
+plus shared doctrine. The packaged `_msdmd_universal.py` must match the vendored
+canonical parser byte for byte. The `llms-build` stdlib runner is vendored at
+repo-root `llms/__init__.py` and `llms/build.py`. Do not copy skill-lib's own
+`llms/metadata.py`; that file is the producer's publication source. Do not copy
+organization-only skills or reinterpret schema-1 findings as native schema-2
+collections.
+
+`char-compress` is a declared derived copy, not part of the exact slice. Do not
+propagate it with `propagate_skills.py`. On a pin move, compare the recorded
+source files with `docs/derived-copies.json`. If any source hash changed, review
+the upstream change, reapply the recorded redaction by hand, and update both
+hashes and the record's `source_commit` in the same commit.
 
 ## Reproduce propagation
 
@@ -18,9 +27,11 @@ replays the current publication pin; select a newly verified SHA for a later upd
 ```bash
 PIN=$(python -c 'import json; print(json.load(open("src/pubskill_lib/_source.json"))["commit"])')
 git -C ../skill-lib checkout --detach "$PIN"
-python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair
-python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair --apply
+python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair manifest llms-build
+python ../skill-lib/tools/propagate_skills.py . --skills msdmd repo-audit-repair manifest llms-build --apply
 cp ../skill-lib/msdmd/parsers/universal.py src/pubskill_lib/_msdmd_universal.py
+cp ../skill-lib/llms/__init__.py llms/__init__.py
+cp ../skill-lib/llms/build.py llms/build.py
 ```
 
 In the same commit, update `SOURCE.md` (SHA and source commit date),
@@ -40,15 +51,26 @@ pre-update consumer source, not a self-referential final commit.
 python -m pip install -e .
 python -m unittest discover -s tests
 python -m pubskill_lib.audit examples/neglected-repo --out /tmp/findings.json
+python .agents/skills/manifest/generate.py --root . --check
+python -m llms.build --root . --out llms.txt --check
+python .agents/skills/char-compress/char_compress_check.py
 ```
 
 The `canonical-source` CI job checks out its explicit trusted producer pin,
-rejects publication metadata that differs, and compares both complete skill trees,
-shared doctrine and the packaged parser. It does not rewrite source before
-checking it. Existing CI separately exercises Python 3.11/3.12, clean-wheel
-behavior, reproducible release archives and source-distribution replay. New
-regression tests exercise the actual vendored Python native reader, prove that
-inspected code is not executed, and require stale projections to fail verification.
+rejects publication metadata that differs, and compares the complete skill trees,
+shared doctrine, the packaged parser, and the portable `llms` runner files. It
+then checks each declared derived copy against its recorded source and consumer
+hashes. It
+does not rewrite source before checking it. Existing CI separately exercises
+Python 3.11/3.12, clean-wheel behavior, reproducible release archives and
+source-distribution replay. New regression tests exercise the actual vendored
+Python native reader, prove that inspected code is not executed, and require
+stale projections to fail verification.
+
+The shipped `llms.build --check` titles the generated file with the checkout
+directory name. In GitHub Actions that directory is `pubskill-lib`. A local
+checkout with a different directory name will report drift unless `--check` is
+run from a path named `pubskill-lib`.
 
 The schema-2 collector and optional parser-runtime declarations now travel with
 the source distribution. Installing the public wheel does not expose a new hosted

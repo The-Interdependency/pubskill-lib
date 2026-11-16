@@ -1,11 +1,15 @@
 include AGENTS.md SOURCE.md HANDOFF.md HANDOFF.vm.md .env.example
 include .gitignore
 include requirements-build.txt
+include CLAUDE.md llms.txt
+include docs/skill-source-sync.md
+include docs/work-graphs/skill-source-sync.json
+include docs/llms-source.md
+include docs/derived-copies.json
 graft .agents/skills
 graft examples
 graft tests
 exclude tests/test_service.py
 graft tools
-include docs/skill-source-sync.md
-include docs/work-graphs/skill-source-sync.json
+graft llms
 global-exclude __pycache__ *.py[cod]

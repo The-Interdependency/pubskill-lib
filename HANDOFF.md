@@ -162,7 +162,7 @@ Compare on `id`, `class`, and `surface`.
 
 Optional if time or disk is scarce. Prefer A–D first.
 
-From skill-lib at the SOURCE.md SHA, copy only `msdmd` and `repo-audit-repair` into `.agents/skills/` and write `.agents/skills/README.md` with the same SHA. Do not copy the rest of skill-lib.
+From skill-lib at the SOURCE.md SHA, copy `msdmd`, `repo-audit-repair`, `manifest`, and `llms-build` into `.agents/skills/` and write `.agents/skills/README.md` with the same SHA. Copy the portable `llms` runner (`llms/__init__.py`, `llms/build.py`) to the repo root so `python -m llms.build` works. Do not copy skill-lib's own `llms/metadata.py` or the rest of skill-lib.
 
 ## Step F — tests in this repo
 

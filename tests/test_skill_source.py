@@ -43,7 +43,7 @@ class SkillSourceTests(unittest.TestCase):
     def test_public_slice_does_not_expand_into_org_skills(self):
         self.assertEqual(
             {path.parent.name for path in SKILLS.glob("*/SKILL.md")},
-            {"msdmd", "repo-audit-repair"},
+            {"msdmd", "repo-audit-repair", "manifest", "llms-build", "char-compress"},
         )
 
     def test_work_graph_is_bound_to_pin(self):
@@ -95,3 +95,9 @@ class SkillSourceTests(unittest.TestCase):
             result = run("--check")
             self.assertNotEqual(result.returncode, 0, "stale source incorrectly passed byte replay")
             self.assertFalse(sentinel.exists())
+
+    def test_llms_runner_is_vendored_without_producer_metadata(self):
+        root = ROOT / "llms"
+        self.assertTrue((root / "__init__.py").is_file())
+        self.assertTrue((root / "build.py").is_file())
+        self.assertFalse((root / "metadata.py").exists())
