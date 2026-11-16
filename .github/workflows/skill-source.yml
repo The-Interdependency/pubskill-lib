@@ -34,7 +34,19 @@ jobs:
           diff -ru canonical/repo-audit-repair consumer/.agents/skills/repo-audit-repair
           diff -ru canonical/manifest consumer/.agents/skills/manifest
           diff -ru canonical/llms-build consumer/.agents/skills/llms-build
+          diff -ru canonical/doc-build consumer/.agents/skills/doc-build
+          diff -ru canonical/cap-build consumer/.agents/skills/cap-build
+          diff -ru canonical/deps-build consumer/.agents/skills/deps-build
+          diff -ru canonical/test-build consumer/.agents/skills/test-build
+          diff -ru canonical/github-tests consumer/.agents/skills/github-tests
+          diff -ru canonical/ssh-automation consumer/.agents/skills/ssh-automation
+          diff -ru canonical/sql-queries consumer/.agents/skills/sql-queries
+          diff -ru canonical/statistical-analysis consumer/.agents/skills/statistical-analysis
+          diff -ru canonical/explore-data consumer/.agents/skills/explore-data
+          diff -ru canonical/validate-data consumer/.agents/skills/validate-data
           cmp canonical/doctrine/msdmd-checks.md consumer/.agents/skills/doctrine/msdmd-checks.md
+          cmp canonical/ATTRIBUTION.md consumer/ATTRIBUTION.md
+          cmp canonical/LICENSES/Apache-2.0.txt consumer/LICENSES/Apache-2.0.txt
           cmp canonical/msdmd/parsers/universal.py consumer/src/pubskill_lib/_msdmd_universal.py
           cmp canonical/llms/__init__.py consumer/llms/__init__.py
           cmp canonical/llms/build.py consumer/llms/build.py

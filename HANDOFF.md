@@ -162,7 +162,7 @@ Compare on `id`, `class`, and `surface`.
 
 Optional if time or disk is scarce. Prefer A–D first.
 
-From skill-lib at the SOURCE.md SHA, copy `msdmd`, `repo-audit-repair`, `manifest`, and `llms-build` into `.agents/skills/` and write `.agents/skills/README.md` with the same SHA. Copy the portable `llms` runner (`llms/__init__.py`, `llms/build.py`) to the repo root so `python -m llms.build` works. Do not copy skill-lib's own `llms/metadata.py` or the rest of skill-lib.
+From skill-lib at the SOURCE.md SHA, copy the exact public slice listed in `SOURCE.md` and `.agents/skills/README.md` into `.agents/skills/`, and write that README with the same SHA while preserving the declared derived-copy section for `char-compress`. Copy the portable `llms` runner (`llms/__init__.py`, `llms/build.py`) to the repo root so `python -m llms.build` works. When imported Apache-2.0 skills are in the slice, also copy `ATTRIBUTION.md` and `LICENSES/Apache-2.0.txt`. Do not copy skill-lib's own `llms/metadata.py`, org-only skills, or the rest of skill-lib. Do not overwrite `char-compress` with `propagate_skills.py`.
 
 ## Step F — tests in this repo
 
