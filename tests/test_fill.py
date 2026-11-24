@@ -259,6 +259,72 @@ class FillTests(unittest.TestCase):
         (root / "linked-skill").symlink_to(root / "example-skill", target_is_directory=True)
         self.assertIn("linked-skill: template directory must not be a symlink", fill.verify(root))
 
+    def compatible_second_template(self, root):
+        other = self.second_template(root, required_contact=False)
+        spec_path = other / "template.json"
+        spec = json.loads(spec_path.read_text())
+        spec["fields"]["escalation_contact"]["default"] = "the repository maintainers"
+        spec_path.write_text(json.dumps(spec))
+        return other
+
+    def assert_layout_refused(self, extra_files, expected):
+        # The broken layout lives in other-skill, which `all` fills after
+        # example-skill: nothing may be published before the refusal.
+        root = self.templates_copy(f"templates-{len(list(self.tmp.iterdir()))}")
+        other = self.compatible_second_template(root)
+        for rel, text in extra_files.items():
+            path = other / "files" / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+        problems = "\n".join(fill.verify(root))
+        self.assertIn(expected, problems)
+        with self.assertRaises(fill.FillError):
+            fill.load_template(root, "other-skill")
+        out = self.tmp / f"out-{root.name}"
+        result = run("all", "--config", str(EXAMPLE), "--out", str(out), "--templates", str(root))
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(expected, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(out.exists())
+
+    def test_rendered_file_directory_collision_is_refused(self):
+        # Codex r4683043077: files/docs.tmpl renders a file `docs` while
+        # files/docs/README.md.tmpl needs `docs/` to be a directory.
+        self.assert_layout_refused(
+            {"docs.tmpl": "plain\n", "docs/README.md.tmpl": "plain\n"},
+            "rendered file docs (from docs.tmpl) is also a directory for docs/README.md",
+        )
+        self.assert_layout_refused(
+            {"a/b.tmpl": "plain\n", "a/b/c/d.md.tmpl": "plain\n"},
+            "rendered file a/b (from a/b.tmpl) is also a directory for a/b/c/d.md",
+        )
+
+    def test_reserved_provenance_name_is_refused(self):
+        for files in ({"FILLED_FROM.json.tmpl": "{}\n"}, {"FILLED_FROM.json/x.md.tmpl": "plain\n"}):
+            with self.subTest(files=sorted(files)):
+                self.assert_layout_refused(files, "collides with reserved FILLED_FROM.json")
+
+    def test_empty_rendered_name_is_refused(self):
+        for rel in (".tmpl", "docs/.tmpl"):
+            with self.subTest(rel=rel):
+                self.assert_layout_refused({rel: "plain\n"}, f"template file has an empty rendered name: {rel}")
+
+    def test_malformed_template_json_is_reported_not_raised(self):
+        for index, raw in enumerate(("{not json", "[]", b"\xff\xfe")):
+            with self.subTest(raw=raw):
+                root = self.templates_copy(f"templates-json-{index}")
+                spec_path = root / "example-skill" / "template.json"
+                if isinstance(raw, bytes):
+                    spec_path.write_bytes(raw)
+                else:
+                    spec_path.write_text(raw)
+                problems = fill.verify(root)
+                self.assertTrue(any(p.startswith("example-skill: template.json") for p in problems), problems)
+                result = run("--verify", "--templates", str(root))
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("example-skill: template.json", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

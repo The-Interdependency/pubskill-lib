@@ -21,6 +21,14 @@ templates/
 
 Template files end in `.tmpl` so no loader mistakes them for a `SKILL.md`.
 
+`load_template` (and so `--verify` and every fill) also checks the rendered
+path tree before anything is written. It rejects a file named exactly `.tmpl`
+(empty output name), any file that would render to the reserved provenance file
+`FILLED_FROM.json` or under a `FILLED_FROM.json/` directory, and any rendered
+file whose path is also a parent directory of another rendered file (for
+example `docs.tmpl` next to `docs/README.md.tmpl`). A `template.json` that is
+not valid UTF-8 JSON, or is not a JSON object, is reported against its template.
+
 ## Field schema
 
 `template.json` declares `schema: "pubskill-lib.template"`, `version: 1`,

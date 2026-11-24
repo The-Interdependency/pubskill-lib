@@ -83,6 +83,39 @@ def list_templates(root: Path) -> list[str]:
     return sorted(p.name for p in root.iterdir() if p.is_dir() or p.is_symlink())
 
 
+PROVENANCE_FILE = "FILLED_FROM.json"
+
+
+def _output_path_problems(sources: dict[str, str]) -> list[str]:
+    """Reject rendered layouts that cannot be written as one tree.
+
+    ``render`` strips ``.tmpl`` and adds ``FILLED_FROM.json`` at the root, so
+    check the rendered paths here, before anything is staged: an empty name, the
+    reserved provenance name, or a path that is both a file and a parent
+    directory of another rendered file.
+    """
+    problems = []
+    rendered = {}
+    for rel in sorted(sources):
+        out = rel[: -len(TEMPLATE_SUFFIX)]
+        if not out or any(part == "" for part in out.split("/")):
+            problems.append(f"template file has an empty rendered name: {rel}")
+            continue
+        if out == PROVENANCE_FILE or out.startswith(PROVENANCE_FILE + "/"):
+            problems.append(f"template file collides with reserved {PROVENANCE_FILE}: {rel}")
+            continue
+        rendered[out] = rel
+    for out, rel in sorted(rendered.items()):
+        parts = out.split("/")
+        for depth in range(1, len(parts)):
+            prefix = "/".join(parts[:depth])
+            if prefix in rendered:
+                problems.append(
+                    f"rendered file {prefix} (from {rendered[prefix]}) is also a directory for {out} (from {rel})"
+                )
+    return problems
+
+
 def load_template(root: Path, name: str) -> dict:
     if not NAME.match(name) or name == "all":
         raise FillError([f"invalid template name: {name!r}"])
@@ -94,7 +127,12 @@ def load_template(root: Path, name: str) -> dict:
     if not (tdir / "template.json").is_file():
         raise FillError([f"{name}: missing template.json schema"])
     problems = []
-    spec = json.loads((tdir / "template.json").read_text(encoding="utf-8"))
+    try:
+        spec = json.loads((tdir / "template.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise FillError([f"{name}: template.json is not valid JSON ({type(exc).__name__})"]) from None
+    if not isinstance(spec, dict):
+        raise FillError([f"{name}: template.json must be a JSON object"])
     if spec.get("schema") != TEMPLATE_SCHEMA or spec.get("version") != 1:
         problems.append(f"{name}: template.json must declare schema {TEMPLATE_SCHEMA} version 1")
     if spec.get("name") != name:
@@ -140,6 +178,7 @@ def load_template(root: Path, name: str) -> dict:
                 sources[rel] = data.decode("utf-8")
             except UnicodeDecodeError:
                 problems.append(f"{name}: template file is not UTF-8 text: {rel}")
+    problems.extend(f"{name}: {p}" for p in _output_path_problems(sources))
     used = set()
     for rel, text in sorted(sources.items()):
         start = 0
@@ -226,7 +265,7 @@ def render(template: dict, values: dict) -> dict[str, bytes]:
     for rel, text in template["sources"].items():
         rendered = PLACEHOLDER.sub(lambda m: values[m.group(1)], text)
         out[rel[: -len(TEMPLATE_SUFFIX)]] = rendered.encode("utf-8")
-    out["FILLED_FROM.json"] = (
+    out[PROVENANCE_FILE] = (
         json.dumps(
             {
                 "schema": "pubskill-lib.filled",
