@@ -74,15 +74,25 @@ def _read_tree(root: Path) -> dict[str, bytes]:
 
 
 def list_templates(root: Path) -> list[str]:
-    return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "template.json").is_file())
+    """Every directory under ``root`` is a candidate template.
+
+    Presence of ``template.json`` is not used as a filter: a directory that
+    lacks its schema is still listed so ``load_template`` (and therefore
+    ``--verify`` and ``all``) reports it instead of silently skipping it.
+    """
+    return sorted(p.name for p in root.iterdir() if p.is_dir() or p.is_symlink())
 
 
 def load_template(root: Path, name: str) -> dict:
     if not NAME.match(name) or name == "all":
         raise FillError([f"invalid template name: {name!r}"])
     tdir = root / name
-    if not (tdir / "template.json").is_file():
+    if tdir.is_symlink():
+        raise FillError([f"{name}: template directory must not be a symlink"])
+    if not tdir.is_dir():
         raise FillError([f"unknown template: {name}"])
+    if not (tdir / "template.json").is_file():
+        raise FillError([f"{name}: missing template.json schema"])
     problems = []
     spec = json.loads((tdir / "template.json").read_text(encoding="utf-8"))
     if spec.get("schema") != TEMPLATE_SCHEMA or spec.get("version") != 1:

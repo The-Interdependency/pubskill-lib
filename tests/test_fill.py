@@ -174,7 +174,7 @@ class FillTests(unittest.TestCase):
         self.assertFalse(out.exists())
 
     def test_defaults_cannot_carry_placeholder_syntax(self):
-        for index, default in enumerate(("{{pubskill:org_name}}", "{{pubskill: broken", "two\nlines", 7)):
+        for index, default in enumerate(("{{pubskill:org_name}}", "{{pubskill:undeclared}}", "{{pubskill: broken", "two\nlines", 7)):
             with self.subTest(default=default):
                 root = self.templates_copy(f"templates-{index}")
                 spec_path = root / "example-skill" / "template.json"
@@ -211,6 +211,54 @@ class FillTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(first.read_text(), "local edit\n")
                 self.assertEqual(list(decoy.iterdir()), [])
+
+    def test_placeholder_default_refuses_fill_and_writes_nothing(self):
+        # Codex r4589674599: an undeclared placeholder in a default must not be
+        # written verbatim into the consumer copy by the single render pass.
+        root = self.templates_copy()
+        spec_path = root / "example-skill" / "template.json"
+        spec = json.loads(spec_path.read_text())
+        spec["fields"]["escalation_contact"]["default"] = "{{pubskill:undeclared}}"
+        spec_path.write_text(json.dumps(spec))
+        out = self.tmp / "out"
+        for name in ("example-skill", "all"):
+            with self.subTest(name=name):
+                result = run(name, "--config", str(EXAMPLE), "--out", str(out), "--templates", str(root))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("must not contain placeholder syntax", result.stderr)
+                self.assertFalse(out.exists())
+
+    def test_template_directory_without_schema_is_reported_not_skipped(self):
+        # Codex r4589901488: a template dir missing or misnaming template.json
+        # must fail --verify and `all`, not vanish from the gate.
+        for variant in ("missing", "misnamed"):
+            with self.subTest(variant=variant):
+                root = self.templates_copy(f"templates-{variant}")
+                stray = root / "new-org-skill"
+                (stray / "files").mkdir(parents=True)
+                (stray / "files" / "SKILL.md.tmpl").write_text("{{pubskill:undeclared}} for skill-lib\n")
+                if variant == "misnamed":
+                    (stray / "Template.json").write_text("{}")
+                self.assertIn("new-org-skill", fill.list_templates(root))
+                problems = fill.verify(root)
+                self.assertIn("new-org-skill: missing template.json schema", problems)
+                result = run("--verify", "--templates", str(root))
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("new-org-skill: missing template.json schema", result.stderr)
+                out = self.tmp / f"out-{variant}"
+                result = run("all", "--config", str(EXAMPLE), "--out", str(out), "--templates", str(root))
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("new-org-skill: missing template.json schema", result.stderr)
+                self.assertFalse(out.exists())
+                result = run("new-org-skill", "--config", str(EXAMPLE), "--out", str(out), "--templates", str(root))
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("new-org-skill: missing template.json schema", result.stderr)
+
+    def test_symlinked_template_directory_is_rejected(self):
+        root = self.templates_copy()
+        (root / "linked-skill").symlink_to(root / "example-skill", target_is_directory=True)
+        self.assertIn("linked-skill: template directory must not be a symlink", fill.verify(root))
+
 
 if __name__ == "__main__":
     unittest.main()

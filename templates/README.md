@@ -69,7 +69,9 @@ from a source checkout. An installed wheel does not include templates, so pass
 
 `--verify` runs in CI and in `tests/test_fill.py`. It checks that:
 
-1. every template directory is valid and listed in `TEMPLATES.lock.json`
+1. every template directory is valid and listed in `TEMPLATES.lock.json`;
+   every directory under `templates/` is treated as a template, so one that
+   lacks `template.json` (or is a symlink) fails instead of being skipped
 2. `template_sha256` matches the template's bytes (template.json, example config, files)
 3. rendering `example.config.json` matches `example_output_sha256`
 4. the leak gate passes
