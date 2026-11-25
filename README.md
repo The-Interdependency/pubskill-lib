@@ -120,6 +120,27 @@ If generated prose cannot be encoded in the source encoding, the file is also
 left intact with `hmmm`. Existing narratives remain
 available in assembled documentation even when a file has no safe mutation adapter.
 
+## Org skill templates
+
+Org-only skills ship only as templates under `templates/`. They are not installed
+skills. The fill-in generator writes your own copy from a template plus a small
+config file (JSON or TOML, one string per field):
+
+```bash
+python -m pubskill_lib.fill NAME --config my-org.toml --out .agents/skills
+python -m pubskill_lib.fill all --config my-org.toml --out .agents/skills --check
+```
+
+It writes `<out>/<NAME>/`. It exits non-zero and writes nothing if any field is
+missing, empty, or not declared by the template. It refuses to replace different
+existing content unless you pass `--force`. `--check` reports drift and writes
+nothing. Config values are never printed. Each template's fields are declared in
+its `template.json`.
+
+No org skills are templated yet. `templates/example-skill/` is a synthetic example
+used by tests and docs. Format, placeholder syntax, and the leak gate are in
+[templates/README.md](templates/README.md).
+
 ## License
 
 MPL-2.0, same as skill-lib. Changes to MPL-covered files must be published.

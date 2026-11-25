@@ -1,0 +1,21 @@
+{
+  "schema": "pubskill-lib.template",
+  "version": 1,
+  "name": "example-skill",
+  "description": "Synthetic template for tests and docs. It is not an org skill.",
+  "fields": {
+    "org_name": {
+      "description": "Your organization's display name",
+      "required": true
+    },
+    "catalog_repo": {
+      "description": "owner/repo of your canonical skill catalog",
+      "required": true
+    },
+    "escalation_contact": {
+      "description": "Who decides when the skill hits an unknown",
+      "required": false,
+      "default": "the repository maintainers"
+    }
+  }
+}
