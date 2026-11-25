@@ -159,6 +159,10 @@ The public slice is pinned in `SOURCE.md` and lives under `.agents/skills/`:
 - `repo-audit-repair` (contract)
 - `manifest` — living-spec generator for the facts block in `CLAUDE.md`
 - `llms-build` — root `llms.txt` publisher from `LLMS` blocks
+- `doc-build`, `cap-build`, `deps-build`, `test-build` — msdmd-family contracts (exact copies)
+- `github-tests` — test evidence and GitHub CI gates (exact copy)
+- `ssh-automation` — fail-closed SSH scripting doctrine (exact copy)
+- `sql-queries`, `statistical-analysis`, `explore-data`, `validate-data` — imported Apache-2.0 data skills (exact copies). Attribution: `ATTRIBUTION.md` and `LICENSES/Apache-2.0.txt`.
 - `char-compress` — character-based context compression for agent handoff and skill writing, with a fixture checker. This is a declared redacted public core, not a byte-identical copy; see `docs/derived-copies.json`.
 
 The `llms-build` runner is at repo-root `llms/`, so `python -m llms.build` works as in skill-lib. skill-lib's own `llms/metadata.py` is not shipped here.

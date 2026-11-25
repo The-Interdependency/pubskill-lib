@@ -7,9 +7,9 @@ Canon: https://github.com/The-Interdependency/skill-lib
 | Pinned SHA | `3001c1a70c1c9d5a063325193ed4ee6db73cd765` |
 | Pinned date | 2026-11-15 |
 | Pin meaning | exact canonical source used for the vendored public skill slice |
-| Runnable subset | `msdmd` (runnable), `repo-audit-repair` (contract), `manifest`, `llms-build` |
+| Runnable subset | `msdmd` (runnable), `repo-audit-repair` (contract), `manifest`, `llms-build`, `doc-build`, `cap-build`, `deps-build`, `test-build`, `github-tests`, `ssh-automation`, `sql-queries`, `statistical-analysis`, `explore-data`, `validate-data` |
 
-`manifest` and `llms-build` ship stdlib runners. `skills.json` at this pin marks only `msdmd` as `runnable` and `repo-audit-repair` as `contract`; it does not assign a status field to the other two.
+`manifest` and `llms-build` ship stdlib runners. `skills.json` at this pin marks only `msdmd` as `runnable` and `repo-audit-repair` as `contract`; it does not assign a status field to the other named skills. The additional skills in the subset are exact copies at this pin. Imported Apache-2.0 skills (`sql-queries`, `statistical-analysis`, `explore-data`, `validate-data`) keep `ATTRIBUTION.md` and `LICENSES/Apache-2.0.txt` at the repo root.
 
 The `llms-build` runner is vendored at repo-root `llms/__init__.py` and `llms/build.py` so `python -m llms.build` works. skill-lib's own `llms/metadata.py` is not copied; that file is the producer's publication source, not part of the portable runner.
 

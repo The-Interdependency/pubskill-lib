@@ -1,4 +1,6 @@
 include AGENTS.md SOURCE.md HANDOFF.md HANDOFF.vm.md .env.example
+include ATTRIBUTION.md
+graft LICENSES
 include .gitignore
 include requirements-build.txt
 include CLAUDE.md llms.txt

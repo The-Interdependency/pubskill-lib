@@ -14,6 +14,16 @@ Skills refreshed from the source commit above:
 - `repo-audit-repair/`
 - `manifest/`
 - `llms-build/`
+- `doc-build/`
+- `cap-build/`
+- `deps-build/`
+- `test-build/`
+- `github-tests/`
+- `ssh-automation/`
+- `sql-queries/`
+- `statistical-analysis/`
+- `explore-data/`
+- `validate-data/`
 
 Declared derived (redacted) copies, recorded in `docs/derived-copies.json`:
 

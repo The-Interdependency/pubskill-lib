@@ -20,7 +20,7 @@ Human entry: [README.md](README.md). Agent contract: [AGENTS.md](AGENTS.md). Sou
 | Optional extras | none |
 | Keywords | none |
 | CI workflows | `ci.yml`, `skill-source.yml` |
-| Top-level directories | `docs/` · `examples/` · `llms/` · `src/` · `templates/` · `tests/` · `tools/` |
+| Top-level directories | `LICENSES/` · `docs/` · `examples/` · `llms/` · `src/` · `templates/` · `tests/` · `tools/` |
 
 <sub>Derived from `pyproject.toml` + the repo tree. Unknown fields surface as `hmmm` rather than a guess.</sub>
 <!-- END GENERATED:manifest -->
