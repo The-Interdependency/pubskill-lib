@@ -4,10 +4,10 @@
   "fixtures": [
     {
       "id": "negation_preserved",
-      "text": "The scheduler is not a supervisor.",
+      "text": "a0 is not a supervisor.",
       "expect": {
         "frozen_bones": ["not"],
-        "flesh": ["scheduler", "supervisor"]
+        "flesh": ["a0", "supervisor"]
       },
       "forbid_anywhere": ["central coordinator", "manager"]
     },
@@ -22,17 +22,17 @@
     },
     {
       "id": "order_preserved",
-      "text": "First fetch README.md, then update index.json, last verify CHANGELOG.md.",
+      "text": "First fetch README.md, then update skills.json, last verify ORG_DISTRIBUTION.md.",
       "expect": {
         "frozen_bones": ["first", "then", "last"],
-        "flesh": ["README.md", "index.json", "CHANGELOG.md"]
+        "flesh": ["README.md", "skills.json", "ORG_DISTRIBUTION.md"]
       }
     },
     {
       "id": "value_preserved",
-      "text": "Copy example-org/example-skills to .agents/skills/char-compress/ on 2026-06-04.",
+      "text": "Copy The-Interdependency/skill-lib to .agents/skills/char-compress/ on 2026-06-04.",
       "expect": {
-        "flesh": ["example-org/example-skills", ".agents/skills/char-compress/", "2026-06-04"]
+        "flesh": ["The-Interdependency/skill-lib", ".agents/skills/char-compress/", "2026-06-04"]
       }
     },
     {
@@ -63,15 +63,17 @@
       }
     },
     {
-      "id": "no_theorem_transfer",
-      "text": "Theorem N does not validate char-compress; external metric status is not claimed.",
+      "id": "no_ucns_transfer",
+      "text": "Theorem N does not validate char-compress; EDCM metric status is not claimed.",
       "expect": {
         "frozen_bones": ["not"],
-        "flesh": ["Theorem", "N", "char-compress", "external", "metric", "status", "claimed"]
+        "flesh": ["Theorem", "N", "char-compress", "EDCM", "metric", "status", "claimed"]
       },
       "forbid_anywhere": [
+        "UCNS proves char-compress",
         "Theorem N validates char-compress",
-        "external metric status is claimed"
+        "char-compress implements UCNS-A",
+        "EDCM metric status is claimed"
       ]
     }
   ]
